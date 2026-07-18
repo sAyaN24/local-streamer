@@ -1,0 +1,46 @@
+[project]
+name = "streammark-backend"
+version = "0.1.0"
+description = "LiveKit-powered capture-card ingestion and room/token service for StreamMark"
+requires-python = ">=3.12"
+dependencies = [
+    "livekit==1.1.13",
+    "livekit-api==1.1.1",
+    "livekit-protocol==1.1.18",
+    "fastapi==0.139.0",
+    "uvicorn[standard]==0.50.0",
+    "opencv-python==5.0.0.93",
+    "numpy==2.5.1",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "python-dotenv==1.2.2",
+    "motor==3.7.1",
+    "bcrypt==5.0.0",
+    "PyJWT==2.13.0",
+    "email-validator==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "mongomock-motor==0.0.36",
+]
+
+[project.scripts]
+streammark-api = "streammark.api.__main__:main"
+streammark-ingest = "streammark.ingest.main:cli"
+streammark-logger-bot = "streammark.tools.logger_bot:cli"
+streammark-mint-token = "streammark.tools.mint_publisher_token:cli"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

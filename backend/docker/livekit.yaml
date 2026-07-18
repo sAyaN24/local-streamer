@@ -1,0 +1,27 @@
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882        # single shared UDP port: simplest to operate, one firewall rule
+  use_external_ip: false # LAN-only; no STUN/public-IP discovery needed
+  node_ip: 192.168.29.64 # host's LAN IP; explicit because this host also runs Docker's own
+                          # bridge interface, which auto-detection could pick instead
+
+# TURN is off by default: LiveKit's built-in TURN needs either a real domain (for TLS-based
+# turns:) or a UDP-only setup; it's a real safety net for Wi-Fi client isolation / VLAN
+# segmentation edge cases, but is deployment-specific to configure correctly, so it's left
+# as an opt-in rather than a broken-by-default block. To enable UDP-only TURN (no domain
+# needed), uncomment:
+# turn:
+#   enabled: true
+#   udp_port: 3478
+
+keys:
+  # DEV PLACEHOLDER ONLY -- LiveKit requires secrets >=32 chars; this one is not secret and
+  # must be replaced before any deployment that isn't a fully trusted, air-gapped LAN.
+  devkey: "devsecret-please-change-before-deploy"
+
+logging:
+  level: info

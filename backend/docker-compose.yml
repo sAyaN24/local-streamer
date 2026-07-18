@@ -1,0 +1,101 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: streammark-livekit
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./docker/livekit.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      # livekit-server's Alpine base image ships wget, not curl.
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:7880/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  mongo:
+    # Pinned below mongo:8: mongo:8's tcmalloc does a hard CHECK on cgroup cpuset info that
+    # crashes (SIGSEGV / exit 139) under some nested/restricted container runtimes where that
+    # info isn't exposed. mongo:6 has no such check. Bump back to :8 if your Docker host has
+    # full cgroup access and you've confirmed it starts cleanly there.
+    image: mongo:6
+    container_name: streammark-mongo
+    restart: unless-stopped
+    network_mode: host   # consistent with livekit/api; binds to the host's 27017
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: streammark-api
+    restart: unless-stopped
+    network_mode: host   # shares host network with livekit/mongo; simplest for LAN reachability
+    env_file: .env
+    depends_on:
+      livekit:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        # Vite inlines this at build time. Set to the host's LAN IP (not localhost) so
+        # devices other than the host itself can reach the API from their browsers.
+        VITE_API_BASE_URL: http://192.168.29.64:8000
+    container_name: streammark-frontend
+    restart: unless-stopped
+    network_mode: host   # consistent with the other services; nginx binds to the host's :5173
+                          # (not :80 -- rootless Docker can't bind privileged ports with host networking)
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # One-shot dev convenience: creates a demo host account + a live 'demo-room' so `docker
+  # compose up` gives you something to look at immediately. Idempotent (scripts/seed_demo_room.py
+  # tolerates the account/room already existing), so it's safe on every `up`, not just the first.
+  seed:
+    image: python:3.12-slim
+    container_name: streammark-seed
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ./scripts/seed_demo_room.py:/seed_demo_room.py:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["python", "/seed_demo_room.py"]
+    restart: "no"
+
+volumes:
+  mongo-data:
+
+# The ingest service intentionally is NOT defined here by default. It needs direct
+# access to the capture card's /dev/videoN device node, so it should run natively on
+# the capture host:
+#
+#   streammark-ingest --room <name> --device /dev/video0
+#
+# Opt-in containerized fallback, if you must containerize it (adjust device path):
+#
+#  ingest:
+#    build:
+#      context: .
+#      dockerfile: docker/api.Dockerfile   # same base image; override the command
+#    command: ["streammark-ingest", "--room", "shared-stream"]
+#    network_mode: host
+#    devices:
+#      - "/dev/video0:/dev/video0"
+#    group_add:
+#      - "video"
+#    env_file: .env
