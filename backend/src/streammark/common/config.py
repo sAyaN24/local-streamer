@@ -17,7 +17,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
     # --- LiveKit connection ---
+    # livekit_url is the URL handed to browsers via /rooms/*/viewer-token, so it
+    # must be reachable from LAN clients (typically the host's LAN IP).
+    # livekit_url_internal is what this process itself uses for server-to-server
+    # calls; falls back to livekit_url when unset. Split because on Docker
+    # Desktop, containers can't route to the Mac/Windows host's LAN IP but can
+    # reach sibling containers by service name.
     livekit_url: str = "ws://localhost:7880"
+    livekit_url_internal: str | None = None
     livekit_api_key: str = "devkey"
     livekit_api_secret: str = "devsecret-please-change-before-deploy"
 
@@ -74,6 +81,10 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
+
+    @property
+    def livekit_server_url(self) -> str:
+        return self.livekit_url_internal or self.livekit_url
 
     @property
     def viewer_token_ttl(self) -> timedelta:

@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
 
     lkapi = api.LiveKitAPI(
-        settings.livekit_url, settings.livekit_api_key, settings.livekit_api_secret
+        settings.livekit_server_url, settings.livekit_api_key, settings.livekit_api_secret
     )
     app.state.room_service = RoomServiceClient(lkapi)
 

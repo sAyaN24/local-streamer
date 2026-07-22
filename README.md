@@ -11,3 +11,11 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 Want me to set up the venv and actually run one of these against the current stack to confirm it works end-to-end?
+
+
+
+  # auto-detect (no args)
+  bash backend/scripts/start.sh
+
+  # manual override
+  bash backend/scripts/start.sh 192.168.1.5

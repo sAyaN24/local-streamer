@@ -4,7 +4,16 @@ services:
     container_name: streammark-livekit
     command: --config /etc/livekit.yaml
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - streammark_net
+    # LiveKit's livekit.yaml is configured for a single-port setup (tcp_port
+    # 7881, udp_port 7882), which is friendly to Docker port publishing. This
+    # is why we can afford to run it in bridge mode instead of host networking
+    # -- there's no huge UDP range to publish.
+    ports:
+      - "7880:7880"       # WS/HTTP signaling
+      - "7881:7881"       # TCP fallback for RTC
+      - "7882:7882/udp"   # RTC media (single UDP port per livekit.yaml)
     volumes:
       - ./docker/livekit.yaml:/etc/livekit.yaml:ro
     healthcheck:
@@ -22,7 +31,11 @@ services:
     image: mongo:6
     container_name: streammark-mongo
     restart: unless-stopped
-    network_mode: host   # consistent with livekit/api; binds to the host's 27017
+    networks:
+      - streammark_net
+    # Intentionally no published ports: mongo is only reachable from other services
+    # on the bridge network as `mongo:27017`. Publish it explicitly if you want to
+    # connect from the host with mongosh.
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -37,8 +50,21 @@ services:
       dockerfile: docker/api.Dockerfile
     container_name: streammark-api
     restart: unless-stopped
-    network_mode: host   # shares host network with livekit/mongo; simplest for LAN reachability
+    networks:
+      - streammark_net
+    ports:
+      # Bind to 0.0.0.0:8000 so browsers on other LAN devices can reach the API
+      # at http://<host-lan-ip>:8000.
+      - "8000:8000"
     env_file: .env
+    # MONGODB_URI: rewritten to the bridge service name (only used server-side).
+    # LIVEKIT_URL_INTERNAL: what THIS container uses for server-to-server calls
+    # to livekit. Docker Desktop can't route from containers to the host's LAN
+    # IP, but sibling containers are reachable by service name. LIVEKIT_URL
+    # (from .env) is what the api hands to browsers and must be LAN-reachable.
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      LIVEKIT_URL_INTERNAL: ws://livekit:7880
     depends_on:
       livekit:
         condition: service_healthy
@@ -50,13 +76,20 @@ services:
       context: ../frontend
       dockerfile: docker/frontend.Dockerfile
       args:
-        # Vite inlines this at build time. Set to the host's LAN IP (not localhost) so
-        # devices other than the host itself can reach the API from their browsers.
-        VITE_API_BASE_URL: http://192.168.29.64:8000
+        # Vite inlines this at build time, so the compiled bundle is pinned to
+        # whatever URL you build with. For LAN access from other devices, set
+        # this to the host's LAN IP (e.g. `VITE_API_BASE_URL=http://192.168.1.2:8000
+        # docker compose build frontend`). Defaults to localhost so a plain
+        # `docker compose up --build` at least works from the host itself.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://192.168.1.2:8000}
     container_name: streammark-frontend
     restart: unless-stopped
-    network_mode: host   # consistent with the other services; nginx binds to the host's :5173
-                          # (not :80 -- rootless Docker can't bind privileged ports with host networking)
+    networks:
+      - streammark_net
+    ports:
+      # nginx binds to 5173 inside the container (not :80 -- rootless Docker
+      # can't bind privileged ports); publish it on the host's :5173.
+      - "5173:5173"
     depends_on:
       api:
         condition: service_healthy
@@ -67,7 +100,9 @@ services:
   seed:
     image: python:3.12-slim
     container_name: streammark-seed
-    network_mode: host
+    # Share the api service's network namespace so the script's hardcoded
+    # `http://localhost:8000` resolves to the api process without modification.
+    network_mode: "service:api"
     env_file: .env
     volumes:
       - ./scripts/seed_demo_room.py:/seed_demo_room.py:ro
@@ -76,6 +111,10 @@ services:
         condition: service_healthy
     command: ["python", "/seed_demo_room.py"]
     restart: "no"
+
+networks:
+  streammark_net:
+    driver: bridge
 
 volumes:
   mongo-data:

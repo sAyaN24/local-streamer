@@ -6,7 +6,7 @@ rtc:
   tcp_port: 7881
   udp_port: 7882        # single shared UDP port: simplest to operate, one firewall rule
   use_external_ip: false # LAN-only; no STUN/public-IP discovery needed
-  node_ip: 192.168.29.64 # host's LAN IP; explicit because this host also runs Docker's own
+  node_ip: 192.168.1.2
                           # bridge interface, which auto-detection could pick instead
 
 # TURN is off by default: LiveKit's built-in TURN needs either a real domain (for TLS-based
