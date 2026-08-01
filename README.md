@@ -18,4 +18,4 @@ Want me to set up the venv and actually run one of these against the current sta
   bash backend/scripts/start.sh
 
   # manual override
-  bash backend/scripts/start.sh 192.168.1.5
+  bash backend/scripts/start.sh 10.68.5.138

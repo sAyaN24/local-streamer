@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Room, RoomEvent, Track } from 'livekit-client'
+import { createLocalVideoTrack, Room, RoomEvent, Track } from 'livekit-client'
 
-// Every browser participant joins as a subscribe-only viewer (backend never issues a
-// can_publish=true token to browsers) — this hook never publishes camera/mic tracks.
-export function useLiveKitRoom({ url, token }) {
+export function useLiveKitRoom({ url, token, publishWebcam = false, videoDeviceId = null }) {
   const roomRef = useRef(null)
   const [status, setStatus] = useState('connecting')
   const [videoTrack, setVideoTrack] = useState(null)
   const [remoteParticipants, setRemoteParticipants] = useState([])
   const [localParticipant, setLocalParticipant] = useState(null)
+  const [localVideoTrack, setLocalVideoTrack] = useState(null)
 
   useEffect(() => {
     if (!url || !token) return
@@ -51,8 +50,42 @@ export function useLiveKitRoom({ url, token }) {
       cancelled = true
       room.disconnect()
       roomRef.current = null
+      // Reset so the publishing effect re-fires correctly when a new room connects.
+      setStatus('connecting')
+      setVideoTrack(null)
+      setLocalParticipant(null)
+      setRemoteParticipants([])
     }
   }, [url, token])
 
-  return { room: roomRef.current, status, videoTrack, remoteParticipants, localParticipant }
+  useEffect(() => {
+    const room = roomRef.current
+    if (status !== 'connected' || !publishWebcam || !room) return
+
+    let track = null
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const captureOpts = videoDeviceId ? { deviceId: { exact: videoDeviceId } } : undefined
+        track = await createLocalVideoTrack(captureOpts)
+        if (cancelled) { track.stop(); return }
+        await room.localParticipant.publishTrack(track)
+        if (!cancelled) setLocalVideoTrack(track)
+      } catch (err) {
+        if (!cancelled) console.error('webcam publish failed', err)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      if (track) {
+        room.localParticipant.unpublishTrack(track).catch(() => {})
+        track.stop()
+        setLocalVideoTrack(null)
+      }
+    }
+  }, [status, publishWebcam, videoDeviceId])
+
+  return { room: roomRef.current, status, videoTrack, remoteParticipants, localParticipant, localVideoTrack }
 }

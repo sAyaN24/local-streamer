@@ -81,7 +81,7 @@ services:
         # this to the host's LAN IP (e.g. `VITE_API_BASE_URL=http://192.168.1.2:8000
         # docker compose build frontend`). Defaults to localhost so a plain
         # `docker compose up --build` at least works from the host itself.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://192.168.1.2:8000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://192.168.0.101:8000}
     container_name: streammark-frontend
     restart: unless-stopped
     networks:

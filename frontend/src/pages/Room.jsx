@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Users } from 'lucide-react'
+import { ArrowLeft, Radio, Square, Users } from 'lucide-react'
 import VideoPlaceholder from '../components/VideoPlaceholder.jsx'
 import LiveVideo from '../components/LiveVideo.jsx'
+import LocalVideoPreview from '../components/LocalVideoPreview.jsx'
+import CameraPickerModal from '../components/CameraPickerModal.jsx'
 import AnnotationOverlay from '../components/AnnotationOverlay.jsx'
 import AnnotationToolbar from '../components/AnnotationToolbar.jsx'
 import ParticipantsList from '../components/ParticipantsList.jsx'
@@ -10,13 +12,13 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useRoomMeta } from '../hooks/useRoomMeta.js'
 import { useLiveKitRoom } from '../hooks/useLiveKitRoom.js'
 import { useAnnotations } from '../hooks/useAnnotations.js'
-import { getViewerToken } from '../api/rooms.js'
+import { getBroadcasterToken, getViewerToken } from '../api/rooms.js'
 import { colorForUser, initialsForName } from '../utils/userColor.js'
 
 export default function Room() {
   const { roomId } = useParams()
   const navigate = useNavigate()
-  const { user, isAuthenticated } = useAuth()
+  const { user, token: authToken, isAuthenticated } = useAuth()
 
   const { room, loading: roomLoading } = useRoomMeta(roomId)
 
@@ -33,8 +35,44 @@ export default function Room() {
     }
   }, [roomId, user?.id, user?.name])
 
-  const { room: liveKitRoom, status: connectionStatus, videoTrack, remoteParticipants, localParticipant } =
-    useLiveKitRoom({ url: viewerToken?.url, token: viewerToken?.token })
+  const [isBroadcasting, setIsBroadcasting] = useState(false)
+  const [broadcasterToken, setBroadcasterToken] = useState(null)
+  const [videoDeviceId, setVideoDeviceId] = useState(null)
+  const [videoDevices, setVideoDevices] = useState([])
+  const [showDevicePicker, setShowDevicePicker] = useState(false)
+
+  const handleGoLive = async () => {
+    try {
+      // Trigger permission prompt so enumerateDevices returns labels
+      await navigator.mediaDevices.getUserMedia({ video: true }).then((s) => s.getTracks().forEach((t) => t.stop()))
+      const all = await navigator.mediaDevices.enumerateDevices()
+      const cams = all.filter((d) => d.kind === 'videoinput')
+      const res = await getBroadcasterToken(roomId, authToken)
+      setBroadcasterToken(res)
+      if (cams.length > 1) {
+        setVideoDevices(cams)
+        setShowDevicePicker(true)
+      } else {
+        setVideoDeviceId(cams[0]?.deviceId ?? null)
+        setIsBroadcasting(true)
+      }
+    } catch {
+      // camera permission denied or network error — stay as viewer
+    }
+  }
+
+  const handleDeviceSelected = (deviceId) => {
+    setVideoDeviceId(deviceId)
+    setShowDevicePicker(false)
+    setIsBroadcasting(true)
+  }
+
+  const handleStop = () => setIsBroadcasting(false)
+
+  const activeToken = isBroadcasting && broadcasterToken ? broadcasterToken : viewerToken
+
+  const { room: liveKitRoom, status: connectionStatus, videoTrack, remoteParticipants, localParticipant, localVideoTrack } =
+    useLiveKitRoom({ url: activeToken?.url, token: activeToken?.token, publishWebcam: isBroadcasting, videoDeviceId })
 
   const localIdentity = localParticipant?.identity
 
@@ -121,6 +159,23 @@ export default function Room() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isAuthenticated && (
+            isBroadcasting ? (
+              <button
+                onClick={handleStop}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 sm:text-sm"
+              >
+                <Square className="h-3 w-3 fill-current" /> Stop
+              </button>
+            ) : (
+              <button
+                onClick={handleGoLive}
+                className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 sm:text-sm"
+              >
+                <Radio className="h-3.5 w-3.5" /> Go Live
+              </button>
+            )
+          )}
           <button
             onClick={() => setPanelOpen((o) => !o)}
             className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 sm:text-sm"
@@ -152,6 +207,8 @@ export default function Room() {
             onPointerUp={handlePointerUp}
           />
 
+          {localVideoTrack && <LocalVideoPreview track={localVideoTrack} />}
+
           {panelOpen && (
             <div className="absolute right-3 top-3 w-56 sm:right-4 sm:top-4 sm:w-64">
               <ParticipantsList
@@ -174,6 +231,13 @@ export default function Room() {
           />
         </div>
       </div>
+      {showDevicePicker && (
+        <CameraPickerModal
+          devices={videoDevices}
+          onSelect={handleDeviceSelected}
+          onCancel={() => setShowDevicePicker(false)}
+        />
+      )}
     </div>
   )
 }

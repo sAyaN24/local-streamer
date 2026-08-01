@@ -39,6 +39,27 @@ def mint_viewer_token(
     return token.to_jwt(), int(settings.viewer_token_ttl.total_seconds())
 
 
+def mint_broadcaster_token(
+    settings: Settings, room: str, identity: str, name: str | None = None
+) -> tuple[str, int]:
+    """Returns (jwt, ttl_seconds). Browser publisher: can publish video + subscribe + send data."""
+    grants = api.VideoGrants(
+        room_join=True,
+        room=room,
+        can_publish=True,
+        can_subscribe=True,
+        can_publish_data=True,
+    )
+    token = (
+        api.AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
+        .with_identity(identity)
+        .with_name(name or identity)
+        .with_grants(grants)
+        .with_ttl(settings.viewer_token_ttl)
+    )
+    return token.to_jwt(), int(settings.viewer_token_ttl.total_seconds())
+
+
 def mint_publisher_token(settings: Settings, room: str, identity: str = "ingest") -> str:
     grants = api.VideoGrants(
         room_join=True,

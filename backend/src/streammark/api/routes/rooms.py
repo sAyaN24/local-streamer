@@ -18,7 +18,7 @@ from streammark.api.schemas import (
     ViewerTokenResponse,
 )
 from streammark.common.config import Settings
-from streammark.common.tokens import mint_viewer_token
+from streammark.common.tokens import mint_broadcaster_token, mint_viewer_token
 from streammark.db.repositories import AnnotationRepository, RoomRepository
 
 router = APIRouter()
@@ -147,6 +147,24 @@ async def get_viewer_token(
     jwt_token, ttl = mint_viewer_token(settings, room_id, viewer_identity, display_name)
     return ViewerTokenResponse(
         identity=viewer_identity,
+        room=room_id,
+        url=settings.livekit_url,
+        token=jwt_token,
+        expires_in_seconds=ttl,
+    )
+
+
+@router.get("/{room_id}/broadcaster-token", response_model=ViewerTokenResponse)
+async def get_broadcaster_token(
+    room_id: str,
+    current_user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ViewerTokenResponse:
+    identity = current_user["_id"]
+    name = current_user.get("name") or identity
+    jwt_token, ttl = mint_broadcaster_token(settings, room_id, identity, name)
+    return ViewerTokenResponse(
+        identity=identity,
         room=room_id,
         url=settings.livekit_url,
         token=jwt_token,
