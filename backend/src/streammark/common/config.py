@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     ingest_capture_max_consecutive_read_failures: int = 30
     metrics_log_interval_sec: float = 5.0
 
+    # --- Pupil tracking ---
+    # Detected once per capture frame (throttled by pupil_detect_min_interval_sec) and
+    # broadcast to viewers over the LiveKit data channel so annotations can be anchored
+    # to the pupil's live position/size instead of raw frame coordinates.
+    pupil_detection_enabled: bool = True
+    pupil_detect_min_interval_sec: float = 0.05  # caps detector to ~20Hz regardless of capture fps
+    pupil_publish_interval_sec: float = 0.05     # caps data-channel publish rate to ~20Hz
+    pupil_min_radius_frac: float = 0.06
+    pupil_max_radius_frac: float = 0.35
+    pupil_min_circularity: float = 0.75
+
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
     def _split_csv(cls, v):

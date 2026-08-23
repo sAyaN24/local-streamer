@@ -1,7 +1,12 @@
-// Renders live annotation strokes on top of the video. Coordinates in each stroke's `points`
-// are normalized 0-1 relative to the container; the svg's 0-100 viewBox (stretched to fill via
-// preserveAspectRatio="none") maps them 1:1 regardless of the container's actual pixel size.
-export default function AnnotationOverlay({ strokes = [], colorForUser, visible = true }) {
+import { toAbsolute } from '../utils/pupilRelative.js'
+
+// Renders live annotation strokes on top of the video. Each stroke's `points` are stored
+// pupil-relative (see hooks/useAnnotations.js); they're resolved back to absolute 0-1
+// frame-normalized coordinates against the *current* `pupil` reading on every render, which
+// is what makes strokes visually track the pupil's live position/size. The svg's 0-100
+// viewBox (stretched to fill via preserveAspectRatio="none") then maps those 1:1 regardless
+// of the container's actual pixel size.
+export default function AnnotationOverlay({ strokes = [], colorForUser, visible = true, pupil }) {
   if (!visible) return null
 
   return (
@@ -13,14 +18,17 @@ export default function AnnotationOverlay({ strokes = [], colorForUser, visible 
     >
       {strokes.map((stroke) => {
         const color = stroke.color ?? colorForUser?.(stroke.userId) ?? '#f43f5e'
-        return <Stroke key={stroke.strokeId} stroke={stroke} color={color} />
+        return <Stroke key={stroke.strokeId} stroke={stroke} color={color} pupil={pupil} />
       })}
     </svg>
   )
 }
 
-function Stroke({ stroke, color }) {
-  const points = (stroke.points ?? []).map((p) => ({ x: p.x * 100, y: p.y * 100 }))
+function Stroke({ stroke, color, pupil }) {
+  const points = (stroke.points ?? []).map((p) => {
+    const abs = toAbsolute(p, pupil)
+    return { x: abs.x * 100, y: abs.y * 100 }
+  })
   if (points.length === 0) return null
 
   if (stroke.tool === 'pen') {

@@ -60,7 +60,7 @@ BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$BACKEND_DIR/.env"
 LIVEKIT_YAML="$BACKEND_DIR/docker/livekit.yaml"
 COMPOSE_FILE="$BACKEND_DIR/docker-compose.yml"
-VIDEO="$SCRIPT_DIR/WhatsApp Video 2026-07-07 at 14.19.27.mp4"
+VIDEO="$SCRIPT_DIR/../../../Vision/210526-1254.mp4"
 VENV="$BACKEND_DIR/.venv"
 
 # ── 1. Update IP in config files ──────────────────────────────────────────────

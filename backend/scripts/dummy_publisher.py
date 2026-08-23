@@ -4,7 +4,10 @@ Loops a local sample video file into a LiveKit room so the frontend's viewer/
 annotation flow can be checked against a real subscribed video track, without
 needing a capture card attached. Same shape as the real streammark-ingest
 publisher (src/streammark/ingest/publisher.py) but reads frames from a video
-file via OpenCV instead of a /dev/videoN capture device.
+file via OpenCV instead of a /dev/videoN capture device. Also runs the same
+PupilTracker (src/streammark/ingest/pupil.py) and publishes it on the "pupil"
+data-channel topic, so pupil-anchored annotations can be exercised end-to-end
+against a recorded video too.
 
 Usage (from backend/, with the venv active, `docker compose up -d livekit mongo`,
 and the API already running so the target room exists):
@@ -21,12 +24,15 @@ ingest pipeline and is a separate decision.
 
 import argparse
 import asyncio
+import json
 import sys
+import time
 
 import cv2
 from livekit import api, rtc
 
 from streammark.common.config import get_settings
+from streammark.ingest.pupil import PupilTracker
 
 WIDTH, HEIGHT = 1280, 720
 
@@ -37,7 +43,7 @@ def mint_visible_publisher_token(settings, room: str, identity: str) -> str:
         room=room,
         can_publish=True,
         can_subscribe=False,
-        can_publish_data=False,
+        can_publish_data=True,  # needed for the "pupil" data-channel topic below
         hidden=False,
     )
     token = (
@@ -74,6 +80,20 @@ async def main(room_name: str, identity: str, video_path: str) -> None:
     await room.local_participant.publish_track(track, options)
     print(f"Publishing '{video_path}' in a loop at {video_fps:.1f}fps. Ctrl+C to stop.")
 
+    # Same PupilTracker used by the real ingest service (streammark/ingest/publisher.py),
+    # so this dev path exercises pupil-anchored annotations too, not just plain video.
+    pupil_tracker = (
+        PupilTracker(
+            min_detect_interval_sec=settings.pupil_detect_min_interval_sec,
+            min_radius_frac=settings.pupil_min_radius_frac,
+            max_radius_frac=settings.pupil_max_radius_frac,
+            min_circularity=settings.pupil_min_circularity,
+        )
+        if settings.pupil_detection_enabled
+        else None
+    )
+    last_pupil_publish_ts = 0.0
+
     try:
         while True:
             ret, frame = cap.read()
@@ -84,6 +104,27 @@ async def main(room_name: str, identity: str, video_path: str) -> None:
 
             if frame.shape[1] != WIDTH or frame.shape[0] != HEIGHT:
                 frame = cv2.resize(frame, (WIDTH, HEIGHT))
+
+            if pupil_tracker is not None:
+                now = time.monotonic()
+                center, radius, found = pupil_tracker.update(frame)
+                if center is not None and now - last_pupil_publish_ts >= settings.pupil_publish_interval_sec:
+                    last_pupil_publish_ts = now
+                    payload = {
+                        "type": "pupil",
+                        "found": found,
+                        "cx": center[0] / WIDTH,
+                        "cy": center[1] / HEIGHT,
+                        "rx": radius / WIDTH,
+                        "ry": radius / HEIGHT,
+                        "ts": time.time(),
+                    }
+                    try:
+                        await room.local_participant.publish_data(
+                            json.dumps(payload).encode("utf-8"), reliable=False, topic="pupil"
+                        )
+                    except Exception as exc:
+                        print(f"pupil publish failed: {exc}")
 
             rgba_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
             source.capture_frame(

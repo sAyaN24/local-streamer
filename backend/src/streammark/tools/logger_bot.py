@@ -46,6 +46,13 @@ def _log_task_exception(task: "asyncio.Task[Any]") -> None:
 
 def _make_data_handler(room_name: str, annotation_repo: AnnotationRepository, out_file: TextIO | None):
     def _on_data(data_packet: rtc.DataPacket) -> None:
+        # Only annotation events are persisted here -- e.g. the ~20Hz "pupil" topic
+        # published by ingest/publisher.py is live telemetry only (annotations are
+        # stored pupil-relative, so no pupil history is needed to replay them
+        # correctly) and would otherwise flood this collection.
+        if data_packet.topic != "annotation":
+            return
+
         sender = data_packet.participant.identity if data_packet.participant else "unknown"
         ts = time.time()
         try:

@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import queue
 import threading
+import time
 
 from livekit import rtc
 
@@ -9,6 +11,7 @@ from streammark.common.config import Settings
 from streammark.ingest.capture import CaptureDevice, CaptureError, CaptureOpenError
 from streammark.ingest.frame_convert import bgr_to_rgba_frame
 from streammark.ingest.metrics import IngestMetrics
+from streammark.ingest.pupil import PupilTracker
 from streammark.ingest.reconnect import ConnectionSupervisor
 
 logger = logging.getLogger(__name__)
@@ -49,6 +52,15 @@ class PublisherSession:
         self._capture_stop = threading.Event()
         self._capture_thread: threading.Thread | None = None
         self._supervisor = ConnectionSupervisor(settings, room_name, self._identity)
+
+        self._pupil_tracker = PupilTracker(
+            min_detect_interval_sec=settings.pupil_detect_min_interval_sec,
+            min_radius_frac=settings.pupil_min_radius_frac,
+            max_radius_frac=settings.pupil_max_radius_frac,
+            min_circularity=settings.pupil_min_circularity,
+        )
+        self._pupil_lock = threading.Lock()
+        self._latest_pupil: dict | None = None
 
     def stop(self) -> None:
         self._capture_stop.set()
@@ -107,6 +119,8 @@ class PublisherSession:
                 continue
 
             assert device.profile is not None
+            if self._settings.pupil_detection_enabled:
+                self._update_pupil(bgr, device.profile.width, device.profile.height)
             frame = bgr_to_rgba_frame(bgr, device.profile.width, device.profile.height)
             self._metrics.captured_frames += 1
             self._metrics.capture_fps.tick()
@@ -123,6 +137,27 @@ class PublisherSession:
                 pass
 
         device.release()
+
+    def _update_pupil(self, bgr, width: int, height: int) -> None:
+        """Runs on the capture thread (see class docstring for why: pupil detection is
+        CPU-bound OpenCV work and must not run on the asyncio loop that owns the
+        LiveKit room's reconnect/keepalive tasks). Normalizes to fractions of the
+        frame's width/height independently (not a single uniform scale) so the result
+        matches the frontend's per-axis-stretched annotation coordinate space.
+        """
+        center, radius, found = self._pupil_tracker.update(bgr)
+        if center is None:
+            return
+        with self._pupil_lock:
+            self._latest_pupil = {
+                "type": "pupil",
+                "found": found,
+                "cx": center[0] / width,
+                "cy": center[1] / height,
+                "rx": radius / width,
+                "ry": radius / height,
+                "ts": time.time(),
+            }
 
     async def _on_room_ready(self, room: rtc.Room) -> None:
         width = self._settings.video_width
@@ -150,6 +185,7 @@ class PublisherSession:
         loop = asyncio.get_running_loop()
         frame_period = 1.0 / self._settings.video_fps
         next_deadline = loop.time()
+        last_pupil_publish_ts = 0.0
 
         while (
             not self._capture_stop.is_set()
@@ -164,12 +200,32 @@ class PublisherSession:
             self._metrics.published_frames += 1
             self._metrics.publish_fps.tick()
 
+            now = loop.time()
+            if (
+                self._settings.pupil_detection_enabled
+                and now - last_pupil_publish_ts >= self._settings.pupil_publish_interval_sec
+            ):
+                last_pupil_publish_ts = now
+                await self._publish_pupil(room)
+
             next_deadline += frame_period
             delay = next_deadline - loop.time()
             if delay > 0:
                 await asyncio.sleep(delay)
             else:
                 next_deadline = loop.time()
+
+    async def _publish_pupil(self, room: rtc.Room) -> None:
+        with self._pupil_lock:
+            payload = self._latest_pupil
+        if payload is None:
+            return
+        try:
+            await room.local_participant.publish_data(
+                json.dumps(payload).encode("utf-8"), reliable=False, topic="pupil"
+            )
+        except Exception:
+            logger.debug("failed to publish pupil update", exc_info=True)
 
     async def _metrics_loop(self) -> None:
         while True:

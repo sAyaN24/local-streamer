@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-VIDEO="$SCRIPT_DIR/WhatsApp Video 2026-07-07 at 14.19.27.mp4"
+VIDEO="$SCRIPT_DIR/../../../Vision/210526-1254.mp4"
 VENV="$BACKEND_DIR/.venv"
 
 if [[ ! -f "$VIDEO" ]]; then

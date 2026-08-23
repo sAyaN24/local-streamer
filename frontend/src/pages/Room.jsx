@@ -8,10 +8,12 @@ import CameraPickerModal from '../components/CameraPickerModal.jsx'
 import AnnotationOverlay from '../components/AnnotationOverlay.jsx'
 import AnnotationToolbar from '../components/AnnotationToolbar.jsx'
 import ParticipantsList from '../components/ParticipantsList.jsx'
+import PupilOverlay from '../components/PupilOverlay.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useRoomMeta } from '../hooks/useRoomMeta.js'
 import { useLiveKitRoom } from '../hooks/useLiveKitRoom.js'
 import { useAnnotations } from '../hooks/useAnnotations.js'
+import { usePupilTracking } from '../hooks/usePupilTracking.js'
 import { getBroadcasterToken, getViewerToken } from '../api/rooms.js'
 import { colorForUser, initialsForName } from '../utils/userColor.js'
 
@@ -75,6 +77,7 @@ export default function Room() {
     useLiveKitRoom({ url: activeToken?.url, token: activeToken?.token, publishWebcam: isBroadcasting, videoDeviceId })
 
   const localIdentity = localParticipant?.identity
+  const pupil = usePupilTracking({ room: liveKitRoom })
 
   const [activeTool, setActiveTool] = useState('pen')
   const [showOthers, setShowOthers] = useState(true)
@@ -86,6 +89,7 @@ export default function Room() {
     roomId,
     localIdentity,
     activeTool,
+    pupil,
   })
 
   const visibleStrokes = strokes.filter((s) => {
@@ -198,7 +202,8 @@ export default function Room() {
               }
             />
           )}
-          <AnnotationOverlay colorForUser={colorForUser} visible={showOthers} strokes={visibleStrokes} />
+          <PupilOverlay pupil={pupil} />
+          <AnnotationOverlay colorForUser={colorForUser} visible={showOthers} strokes={visibleStrokes} pupil={pupil} />
           <div
             className="absolute inset-0"
             style={{ pointerEvents: activeTool === 'select' ? 'none' : 'auto', touchAction: 'none' }}

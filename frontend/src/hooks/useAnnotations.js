@@ -2,11 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { RoomEvent } from 'livekit-client'
 import { colorForUser } from '../utils/userColor.js'
 import { getAnnotationHistory } from '../api/rooms.js'
+import { toRelative } from '../utils/pupilRelative.js'
 
 // Peer-to-peer annotation protocol over LiveKit's data channel. There is no backend spec for
 // this — the wire format below is a frontend invention (see integration plan §5d). Messages are
 // JSON, UTF-8 encoded, published with LiveKit's `topic` set to ANNOTATION_TOPIC so non-annotation
 // data messages can be filtered without a JSON parse.
+//
+// Stroke `points` are stored pupil-relative (see utils/pupilRelative.js), not as raw
+// frame-normalized coordinates: each point is captured as an offset from the pupil's
+// center/radius *at the moment it was drawn*. Rendering (AnnotationOverlay) resolves
+// these back to absolute coordinates against the *current* pupil reading, which is what
+// makes annotations track the pupil live as it moves/resizes, including for strokes
+// replayed from history against a pupil position the drawer never saw.
 const ANNOTATION_TOPIC = 'annotation'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -28,9 +36,16 @@ function normalizedPoint(container, clientX, clientY) {
   }
 }
 
-export function useAnnotations({ room, roomId, localIdentity, activeTool }) {
+export function useAnnotations({ room, roomId, localIdentity, activeTool, pupil }) {
   const [strokes, setStrokes] = useState([])
   const drawingRef = useRef(null)
+  // Read via ref (not the `pupil` value directly) inside the pointer callbacks so a
+  // ~20Hz pupil update doesn't recreate handlePointerDown/Move/Up on every tick --
+  // they're still always evaluated against the latest reading.
+  const pupilRef = useRef(pupil)
+  useEffect(() => {
+    pupilRef.current = pupil
+  }, [pupil])
 
   const publish = useCallback(
     (message) => {
@@ -96,7 +111,7 @@ export function useAnnotations({ room, roomId, localIdentity, activeTool }) {
     (e) => {
       if (activeTool === 'select' || !localIdentity) return
       const container = e.currentTarget
-      const point = normalizedPoint(container, e.clientX, e.clientY)
+      const point = toRelative(normalizedPoint(container, e.clientX, e.clientY), pupilRef.current)
 
       if (activeTool === 'text') {
         const text = window.prompt('Annotation text')
@@ -131,7 +146,7 @@ export function useAnnotations({ room, roomId, localIdentity, activeTool }) {
     (e) => {
       const drawing = drawingRef.current
       if (!drawing) return
-      const point = normalizedPoint(e.currentTarget, e.clientX, e.clientY)
+      const point = toRelative(normalizedPoint(e.currentTarget, e.clientX, e.clientY), pupilRef.current)
       drawing.points = drawing.tool === 'pen' ? [...drawing.points, point] : [drawing.points[0], point]
 
       setStrokes((current) => [
