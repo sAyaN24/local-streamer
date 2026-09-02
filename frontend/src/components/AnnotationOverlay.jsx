@@ -34,7 +34,7 @@ function Stroke({ stroke, color, pupil }) {
   if (stroke.tool === 'pen') {
     if (points.length < 2) return null
     const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
-    return <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    return <path d={d} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
   }
 
   if (stroke.tool === 'rectangle') {
@@ -49,7 +49,7 @@ function Stroke({ stroke, color, pupil }) {
         height={Math.abs(b.y - a.y)}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={3}
         vectorEffect="non-scaling-stroke"
       />
     )
@@ -69,7 +69,7 @@ function Stroke({ stroke, color, pupil }) {
         ry={ry || 0.5}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={3}
         vectorEffect="non-scaling-stroke"
       />
     )
@@ -92,7 +92,7 @@ function Stroke({ stroke, color, pupil }) {
           x2={b.x}
           y2={b.y}
           stroke={color}
-          strokeWidth={1.5}
+          strokeWidth={3}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
           markerEnd={`url(#${markerId})`}

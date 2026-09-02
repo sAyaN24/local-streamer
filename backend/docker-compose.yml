@@ -81,7 +81,7 @@ services:
         # this to the host's LAN IP (e.g. `VITE_API_BASE_URL=http://192.168.1.2:8000
         # docker compose build frontend`). Defaults to localhost so a plain
         # `docker compose up --build` at least works from the host itself.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://192.168.0.101:8000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://192.168.88.4:8000}
     container_name: streammark-frontend
     restart: unless-stopped
     networks:
@@ -93,6 +93,34 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  # Dev-only: loops a local video file into 'demo-room' as a visible publisher (see
+  # scripts/dummy_publisher.py) so the viewer/annotation/pupil-tracking flow can be exercised
+  # without capture-card hardware. Opt-in via the 'demo' profile -- not started by a plain
+  # `docker compose up`, since it assumes a specific video file exists on the host -- run with:
+  #   docker compose --profile demo up -d --build dummy-publisher
+  # Override DUMMY_PUBLISHER_VIDEO_DIR/DUMMY_PUBLISHER_VIDEO_FILE to point at a different clip.
+  dummy-publisher:
+    build:
+      context: .
+      dockerfile: docker/dummy-publisher.Dockerfile
+    container_name: streammark-dummy-publisher
+    restart: unless-stopped
+    networks:
+      - streammark_net
+    env_file: .env
+    environment:
+      # Internal service-name address, same reasoning as api's LIVEKIT_URL_INTERNAL: this
+      # container reaches livekit over the bridge network, not the LAN IP browsers use.
+      LIVEKIT_URL: ws://livekit:7880
+    volumes:
+      - ${DUMMY_PUBLISHER_VIDEO_DIR:-../../Vision}:/video:ro
+    command: ["--room", "demo-room", "--video", "/video/${DUMMY_PUBLISHER_VIDEO_FILE:-210526-1254.mp4}"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    profiles:
+      - demo
 
   # One-shot dev convenience: creates a demo host account + a live 'demo-room' so `docker
   # compose up` gives you something to look at immediately. Idempotent (scripts/seed_demo_room.py

@@ -22,8 +22,8 @@ export default function PupilOverlay({ pupil, visible = true }) {
       aria-hidden="true"
       style={{ opacity }}
     >
-      <line x1={0} y1={cy} x2={100} y2={cy} stroke="#22d3ee" strokeWidth={0.3} vectorEffect="non-scaling-stroke" />
-      <line x1={cx} y1={0} x2={cx} y2={100} stroke="#22d3ee" strokeWidth={0.3} vectorEffect="non-scaling-stroke" />
+      <line x1={0} y1={cy} x2={100} y2={cy} stroke="#22d3ee" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      <line x1={cx} y1={0} x2={cx} y2={100} stroke="#22d3ee" strokeWidth={2} vectorEffect="non-scaling-stroke" />
       <ellipse
         cx={cx}
         cy={cy}
@@ -31,13 +31,13 @@ export default function PupilOverlay({ pupil, visible = true }) {
         ry={ry}
         fill="none"
         stroke="#22d3ee"
-        strokeWidth={0.6}
+        strokeWidth={3}
         vectorEffect="non-scaling-stroke"
       />
       <path
         d={`M${cx - 1.2},${cy} L${cx + 1.2},${cy} M${cx},${cy - 1.2} L${cx},${cy + 1.2}`}
         stroke="#22d3ee"
-        strokeWidth={0.4}
+        strokeWidth={2.5}
         vectorEffect="non-scaling-stroke"
       />
     </svg>
