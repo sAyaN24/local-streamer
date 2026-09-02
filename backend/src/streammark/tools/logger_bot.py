@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import signal
+import sys
 import time
 from pathlib import Path
 from typing import Any, TextIO
@@ -105,8 +106,9 @@ async def run_logger_bot(argv: list[str] | None = None) -> None:
         logger.info("logger bot connected", extra={"room": args.room})
 
         loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, stop_event.set)
+        if sys.platform != "win32":
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, stop_event.set)
 
         await stop_event.wait()
         await room.disconnect()

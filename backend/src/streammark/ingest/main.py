@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import signal
+import sys
 
 from streammark.common.config import get_settings
 from streammark.common.logging_setup import configure_logging
@@ -51,8 +52,9 @@ async def run_ingest(argv: list[str] | None = None) -> None:
     session = PublisherSession(settings, room_name, identity=args.identity)
 
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, session.stop)
+    if sys.platform != "win32":
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, session.stop)
 
     logger.info(
         "starting ingest", extra={"room": room_name, "device": settings.capture_device}
