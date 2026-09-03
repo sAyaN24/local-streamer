@@ -32,6 +32,20 @@ detect_lan_ip() {
     ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{print $7; exit}')
   fi
 
+  # Git Bash / MSYS / Cygwin on Windows: none of the above commands exist there,
+  # so fall back to PowerShell (preferred, filters to the adapter with a default
+  # gateway) and finally to parsing `ipconfig` output directly.
+  if [[ -z "$ip" ]] && [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+    if command -v powershell.exe &>/dev/null; then
+      ip=$(powershell.exe -NoProfile -Command \
+        "(Get-NetIPConfiguration | Where-Object { \$_.IPv4DefaultGateway -and \$_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1 -ExpandProperty IPv4Address).IPAddress" \
+        2>/dev/null | tr -d '\r\n')
+    fi
+    if [[ -z "$ip" ]] && command -v ipconfig.exe &>/dev/null; then
+      ip=$(ipconfig.exe | awk -F': ' '/IPv4 Address/{gsub(/\r/,"",$2); print $2; exit}')
+    fi
+  fi
+
   echo "$ip"
 }
 

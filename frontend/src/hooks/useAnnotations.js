@@ -40,7 +40,7 @@ export function useAnnotations({ room, roomId, localIdentity, activeTool, pupil 
   const [strokes, setStrokes] = useState([])
   const drawingRef = useRef(null)
   // Read via ref (not the `pupil` value directly) inside the pointer callbacks so a
-  // ~20Hz pupil update doesn't recreate handlePointerDown/Move/Up on every tick --
+  // per-frame pupil update doesn't recreate handlePointerDown/Move/Up on every tick --
   // they're still always evaluated against the latest reading.
   const pupilRef = useRef(pupil)
   useEffect(() => {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { RoomEvent } from 'livekit-client'
 
 // Consumes the "pupil" data-channel topic published by backend/ingest/publisher.py
-// (PupilTracker, ~20Hz). Payload: { found, cx, cy, rx, ry, ts } all normalized 0-1,
+// (PupilTracker, once per captured frame -- ~capture fps). Payload: { found, cx, cy, rx, ry, ts } all normalized 0-1,
 // cx/cy relative to frame width/height and rx/ry the pupil radius as a fraction of
 // frame width/height respectively (independent per-axis, matching the annotation
 // overlay's non-uniform stretch) -- see utils/pupilRelative.js for how these are

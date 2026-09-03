@@ -11,14 +11,16 @@ export default function PupilOverlay({ pupil, visible = true }) {
   const rx = pupil.rx * 100
   const ry = pupil.ry * 100
   // Dimmed while holding a stale reading (found: false) -- pupil momentarily lost
-  // (e.g. instrument occlusion) rather than genuinely gone.
-  const opacity = pupil.found ? 0.9 : 0.35
+  // (e.g. instrument occlusion) rather than genuinely gone. Eased with a CSS
+  // transition so brief found/lost flicker (common on real, occluded footage)
+  // reads as a soft pulse rather than a jarring on/off flash.
+  const opacity = pupil.found ? 0.9 : 0.55
 
   return (
     <svg
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className="pointer-events-none absolute inset-0 h-full w-full transition-opacity duration-300 ease-out"
       aria-hidden="true"
       style={{ opacity }}
     >

@@ -191,26 +191,37 @@ export default function Room() {
 
       <div className="relative flex-1 overflow-hidden p-3 sm:p-4">
         <div className="relative h-full w-full touch-none">
-          {videoTrack ? (
-            <LiveVideo track={videoTrack} />
-          ) : (
-            <VideoPlaceholder
-              label={
-                connectionStatus === 'error'
-                  ? 'Could not connect to the stream'
-                  : 'Waiting for host to start the stream…'
-              }
+          {/* Locked to the stream's actual 16:9 aspect ratio and auto-centered
+              within the (usually differently-shaped) container -- this is exactly
+              the box LiveVideo's object-contain renders the video into. Video,
+              pupil overlay, annotation overlay, and the drawing-capture div are
+              all children of THIS box (not the outer container) so their 0-100
+              normalized coordinates land on the same rectangle the video actually
+              occupies; sizing any of them to the outer container instead produces
+              a horizontally/vertically offset, non-uniformly-stretched (oval)
+              overlay whenever the container's aspect ratio isn't 16:9. */}
+          <div className="absolute inset-0 m-auto aspect-video max-h-full max-w-full">
+            {videoTrack ? (
+              <LiveVideo track={videoTrack} />
+            ) : (
+              <VideoPlaceholder
+                label={
+                  connectionStatus === 'error'
+                    ? 'Could not connect to the stream'
+                    : 'Waiting for host to start the stream…'
+                }
+              />
+            )}
+            <PupilOverlay pupil={pupil} />
+            <AnnotationOverlay colorForUser={colorForUser} visible={showOthers} strokes={visibleStrokes} pupil={pupil} />
+            <div
+              className="absolute inset-0"
+              style={{ pointerEvents: activeTool === 'select' ? 'none' : 'auto', touchAction: 'none' }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
             />
-          )}
-          <PupilOverlay pupil={pupil} />
-          <AnnotationOverlay colorForUser={colorForUser} visible={showOthers} strokes={visibleStrokes} pupil={pupil} />
-          <div
-            className="absolute inset-0"
-            style={{ pointerEvents: activeTool === 'select' ? 'none' : 'auto', touchAction: 'none' }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          />
+          </div>
 
           {localVideoTrack && <LocalVideoPreview track={localVideoTrack} />}
 

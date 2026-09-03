@@ -120,7 +120,7 @@ class PublisherSession:
 
             assert device.profile is not None
             if self._settings.pupil_detection_enabled:
-                self._update_pupil(bgr, device.profile.width, device.profile.height)
+                self._update_pupil(bgr, device)
             frame = bgr_to_rgba_frame(bgr, device.profile.width, device.profile.height)
             self._metrics.captured_frames += 1
             self._metrics.capture_fps.tick()
@@ -138,22 +138,42 @@ class PublisherSession:
 
         device.release()
 
-    def _update_pupil(self, bgr, width: int, height: int) -> None:
+    def _update_pupil(self, bgr, device: CaptureDevice) -> None:
         """Runs on the capture thread (see class docstring for why: pupil detection is
         CPU-bound OpenCV work and must not run on the asyncio loop that owns the
         LiveKit room's reconnect/keepalive tasks). Normalizes to fractions of the
         frame's width/height independently (not a single uniform scale) so the result
         matches the frontend's per-axis-stretched annotation coordinate space.
+
+        Detection runs against device.crop_box (the calibrated, border-free content
+        region) so a pillarboxed/letterboxed source doesn't confuse the detector --
+        but the *published* frame is always the untouched raw capture (see
+        CaptureDevice.read()), so the result is remapped from crop-local pixel
+        coordinates back into raw-frame fractions before publishing, keeping the
+        marker aligned with what viewers actually see.
         """
-        center, radius, found = self._pupil_tracker.update(bgr)
+        assert device.profile is not None
+        width, height = device.profile.width, device.profile.height
+        crop_box = device.crop_box
+        if crop_box is not None:
+            x0, y0, x1, y1 = crop_box
+            detect_bgr = bgr[y0:y1, x0:x1]
+        else:
+            x0 = y0 = 0
+            detect_bgr = bgr
+
+        center, radius, found = self._pupil_tracker.update(detect_bgr)
+        self._metrics.pupil_checked_frames += 1
+        if found:
+            self._metrics.pupil_found_frames += 1
         if center is None:
             return
         with self._pupil_lock:
             self._latest_pupil = {
                 "type": "pupil",
                 "found": found,
-                "cx": center[0] / width,
-                "cy": center[1] / height,
+                "cx": (x0 + center[0]) / width,
+                "cy": (y0 + center[1]) / height,
                 "rx": radius / width,
                 "ry": radius / height,
                 "ts": time.time(),
@@ -224,8 +244,9 @@ class PublisherSession:
             await room.local_participant.publish_data(
                 json.dumps(payload).encode("utf-8"), reliable=False, topic="pupil"
             )
+            self._metrics.pupil_published_messages += 1
         except Exception:
-            logger.debug("failed to publish pupil update", exc_info=True)
+            logger.warning("failed to publish pupil update", exc_info=True)
 
     async def _metrics_loop(self) -> None:
         while True:

@@ -80,8 +80,8 @@ class Settings(BaseSettings):
     # broadcast to viewers over the LiveKit data channel so annotations can be anchored
     # to the pupil's live position/size instead of raw frame coordinates.
     pupil_detection_enabled: bool = True
-    pupil_detect_min_interval_sec: float = 0.05  # caps detector to ~20Hz regardless of capture fps
-    pupil_publish_interval_sec: float = 0.05     # caps data-channel publish rate to ~20Hz
+    pupil_detect_min_interval_sec: float = 0.0  # 0 = run on every captured frame (~capture fps)
+    pupil_publish_interval_sec: float = 0.0     # 0 = publish on every captured frame (~capture fps)
     pupil_min_radius_frac: float = 0.06
     pupil_max_radius_frac: float = 0.35
     pupil_min_circularity: float = 0.75

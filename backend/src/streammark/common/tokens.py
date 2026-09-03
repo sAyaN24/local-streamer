@@ -4,10 +4,10 @@ Three distinct token shapes exist, each with intentionally different grants:
 
 - viewer:      subscribe video, publish annotation data only. Minted on demand by the
                API service for anyone joining a room to watch + annotate.
-- publisher:   publish video only, never subscribes, never sends data. Minted
-               in-process by the ingest service — NEVER exposed over HTTP, since
-               handing out a can_publish=True token to an arbitrary LAN caller would
-               let them hijack the video feed.
+- publisher:   publish video and pupil-tracking data (the "pupil" data-channel
+               topic), never subscribes. Minted in-process by the ingest service —
+               NEVER exposed over HTTP, since handing out a can_publish=True token
+               to an arbitrary LAN caller would let them hijack the video feed.
 - logger_bot:  subscribe to the data channel only, hidden from the participant list.
                Used by tools/logger_bot.py, a stub extensibility hook for future
                annotation persistence/debugging.
@@ -66,8 +66,12 @@ def mint_publisher_token(settings: Settings, room: str, identity: str = "ingest"
         room=room,
         can_publish=True,
         can_subscribe=False,
-        can_publish_data=False,
-        hidden=True,
+        # PublisherSession._publish_pupil (publisher.py) sends pupil coordinates
+        # on the "pupil" data-channel topic using this same token -- without this,
+        # every publish_data() call is silently rejected server-side (swallowed by
+        # a debug-level except in _publish_pupil), so pupil-anchored annotations
+        # never work against the real capture pipeline.
+        can_publish_data=True,
     )
     token = (
         api.AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
