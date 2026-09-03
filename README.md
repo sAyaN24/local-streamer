@@ -70,6 +70,30 @@ frames, and **aborts if every frame is black** rather than streaming a blank
 feed. It also creates the venv with a Python >= 3.12 interpreter, recreating an
 older one if present.
 
+### Option C — webcam
+
+Same as Option B, but publishes a built-in or plain USB webcam instead of a
+capture card.
+
+```bash
+bash backend/scripts/start_webcam.sh                             # auto-detect
+bash backend/scripts/start_webcam.sh 192.168.0.108               # explicit IP
+bash backend/scripts/start_webcam.sh 192.168.0.108 0             # explicit device
+```
+
+The only real difference from `start_capture.sh` is device selection: a capture
+card enumerates *after* the built-in camera, so `start_capture.sh` prefers the
+highest working index while `start_webcam.sh` prefers a webcam-looking name and
+falls back to the **lowest** working index. Defaults are also webcam-friendly —
+1280x720 @ 30fps, since most webcams negotiate 720p far more reliably than
+1080p. Override with the same `ROOM`, `CAP_WIDTH`, `CAP_HEIGHT`, `CAP_FPS`
+environment variables.
+
+The same pre-flight runs before publishing. If it aborts with an all-black
+frame, the usual causes are a closed privacy shutter, another app (Zoom, Teams,
+OBS) holding the camera, or a denied OS camera permission — on macOS, grant your
+terminal access under System Settings > Privacy & Security > Camera.
+
 ### Stopping
 
 ```bash
