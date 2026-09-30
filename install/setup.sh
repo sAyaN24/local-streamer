@@ -166,7 +166,14 @@ if [[ -n "$LAN_IP" ]]; then
   OLD_VITE_URL="$(grep -oP '(?<=^VITE_API_BASE_URL=).*' "$ENV_FILE" 2>/dev/null || true)"
   sed -i "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://${LAN_IP}:7880|" "$ENV_FILE"
   sed -i "s|node_ip:.*|node_ip: ${LAN_IP}|" "$INSTALL_DIR/infra/docker/livekit.yaml" 2>/dev/null || true
-  sed -i "s|VITE_API_BASE_URL=http://[^:]*:8000|VITE_API_BASE_URL=http://${LAN_IP}:8000|" "$ENV_FILE"
+  if grep -q '^VITE_API_BASE_URL=' "$ENV_FILE"; then
+    sed -i "s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://${LAN_IP}:8000|" "$ENV_FILE"
+  else
+    # Older infra/.env predates this variable (its .env.example didn't have
+    # it yet) -- sed's s|| would silently no-op instead of adding it, so
+    # append it explicitly.
+    echo "VITE_API_BASE_URL=http://${LAN_IP}:8000" >> "$ENV_FILE"
+  fi
   NEW_VITE_URL="$(grep -oP '(?<=^VITE_API_BASE_URL=).*' "$ENV_FILE" 2>/dev/null || true)"
   [[ "$OLD_VITE_URL" != "$NEW_VITE_URL" ]] && FRONTEND_NEEDS_REBUILD=1
   log "Set LiveKit + API LAN IP to $LAN_IP in infra/.env (edit it yourself if you'd rather pin a fixed hostname)."
