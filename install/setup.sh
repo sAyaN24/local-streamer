@@ -146,24 +146,30 @@ fi
 # ── 6. infra/.env ──────────────────────────────────────────────────────────
 ENV_FILE="$INSTALL_DIR/infra/.env"
 ENV_EXAMPLE="$INSTALL_DIR/infra/.env.example"
+FRONTEND_NEEDS_REBUILD=0
 if [[ ! -f "$ENV_FILE" ]]; then
   log "Creating infra/.env from infra/.env.example..."
   cp "$ENV_EXAMPLE" "$ENV_FILE"
-
-  LAN_IP="$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i !~ /^127\./) {print $i; exit}}')"
-  if [[ -n "$LAN_IP" ]]; then
-    sed -i "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://${LAN_IP}:7880|" "$ENV_FILE"
-    sed -i "s|node_ip:.*|node_ip: ${LAN_IP}|" "$INSTALL_DIR/infra/docker/livekit.yaml" 2>/dev/null || true
-    sed -i "s|VITE_API_BASE_URL=http://[^:]*:8000|VITE_API_BASE_URL=http://${LAN_IP}:8000|" "$ENV_FILE"
-    log "Set LiveKit + API LAN IP to $LAN_IP in infra/.env (override later if this box's IP changes)."
-  fi
-
   warn "infra/.env still has the example LIVEKIT_API_SECRET / AUTH_JWT_SECRET" \
        "placeholder values -- edit $ENV_FILE and replace them before exposing" \
        "this box beyond localhost."
   [[ "$TARGET_USER" != "root" ]] && chown "$TARGET_USER":"$TARGET_USER" "$ENV_FILE"
 else
-  log "infra/.env already exists -- leaving it as-is."
+  log "infra/.env already exists -- leaving secrets as-is, refreshing LAN IP below."
+fi
+
+# Re-derive the LAN IP every run (not just on first creation) so a re-run of
+# this script -- e.g. after a reboot changed the box's DHCP lease -- picks up
+# an IP change automatically instead of silently going stale.
+LAN_IP="$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i !~ /^127\./) {print $i; exit}}')"
+if [[ -n "$LAN_IP" ]]; then
+  OLD_VITE_URL="$(grep -oP '(?<=^VITE_API_BASE_URL=).*' "$ENV_FILE" 2>/dev/null || true)"
+  sed -i "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://${LAN_IP}:7880|" "$ENV_FILE"
+  sed -i "s|node_ip:.*|node_ip: ${LAN_IP}|" "$INSTALL_DIR/infra/docker/livekit.yaml" 2>/dev/null || true
+  sed -i "s|VITE_API_BASE_URL=http://[^:]*:8000|VITE_API_BASE_URL=http://${LAN_IP}:8000|" "$ENV_FILE"
+  NEW_VITE_URL="$(grep -oP '(?<=^VITE_API_BASE_URL=).*' "$ENV_FILE" 2>/dev/null || true)"
+  [[ "$OLD_VITE_URL" != "$NEW_VITE_URL" ]] && FRONTEND_NEEDS_REBUILD=1
+  log "Set LiveKit + API LAN IP to $LAN_IP in infra/.env (edit it yourself if you'd rather pin a fixed hostname)."
 fi
 
 # ── 7. Native venv for the capture-card publisher (optional) ─────────────
@@ -193,6 +199,11 @@ sed \
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
+
+if [[ "$FRONTEND_NEEDS_REBUILD" -eq 1 ]]; then
+  log "VITE_API_BASE_URL changed -- rebuilding frontend image so it's baked into the bundle..."
+  "$DOCKER_BIN" compose -f "$INSTALL_DIR/infra/docker-compose.yml" --env-file "$ENV_FILE" build frontend
+fi
 
 if [[ "$START_SERVICE" -eq 1 ]]; then
   log "Starting $SERVICE_NAME (docker compose up -d)..."
