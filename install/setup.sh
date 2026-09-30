@@ -182,10 +182,13 @@ fi
 # ── 8. systemd service ─────────────────────────────────────────────────────
 log "Installing systemd service '$SERVICE_NAME'..."
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
+TEMPLATE="$SCRIPT_DIR/streammark.service.template"
+[[ -f "$TEMPLATE" ]] || TEMPLATE="$INSTALL_DIR/install/streammark.service.template"
+[[ -f "$TEMPLATE" ]] || die "can't find streammark.service.template (looked next to $0 and in $INSTALL_DIR/install)"
 sed \
   -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
   -e "s|__DOCKER_BIN__|$DOCKER_BIN|g" \
-  "$SCRIPT_DIR/streammark.service.template" > "$UNIT_PATH"
+  "$TEMPLATE" > "$UNIT_PATH"
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
