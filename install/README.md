@@ -28,6 +28,11 @@ What it does:
    repo, enables the `docker` service, and adds the invoking user to the
    `docker` group.
 4. Clones (or, on re-run, `git pull`s) the repo into `/opt/local-streamer`.
+   With `--skip-publisher`, this is a sparse checkout of just `infra/` and
+   `install/` instead of the whole repo, since `api`/`frontend` run from the
+   published GHCR images (see `infra/docker-compose.yml`) and don't need
+   `backend-webserver/`/`frontend/`/`stream-publisher/`/`shared/` source on
+   disk at all.
 5. Creates `infra/.env` from `infra/.env.example` if it doesn't exist yet,
    and fills in this box's LAN IP for `LIVEKIT_URL`.
 6. Sets up a native Python venv for `stream-publisher` (the capture-card

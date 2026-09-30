@@ -16,7 +16,14 @@
 #   --dir <path>        Install directory (default: /opt/local-streamer)
 #   --skip-publisher     Skip setting up the native Python venv for the
 #                        capture-card publisher (stream-publisher); only
-#                        needed if this box has the capture hardware attached
+#                        needed if this box has the capture hardware attached.
+#                        Also switches to a sparse checkout of just infra/ and
+#                        install/ instead of the whole repo, since the Docker
+#                        Compose stack runs off the published GHCR images and
+#                        doesn't need backend-webserver/frontend/stream-
+#                        publisher source at all. (The dummy-publisher demo
+#                        profile needs that source to build, so it isn't
+#                        available on a --skip-publisher install.)
 #   --no-start           Install everything but don't start the service yet
 #                        (use this if you still need to edit infra/.env)
 #
@@ -127,16 +134,39 @@ fi
 DOCKER_BIN="$(command -v docker)"
 
 # ── 5. Clone or update the repo ───────────────────────────────────────────
-if [[ -d "$INSTALL_DIR/.git" ]]; then
-  log "Repo already present at $INSTALL_DIR -- pulling latest $BRANCH..."
-  git -C "$INSTALL_DIR" fetch origin "$BRANCH"
-  git -C "$INSTALL_DIR" checkout "$BRANCH"
-  git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH"
-elif [[ -e "$INSTALL_DIR" ]]; then
-  die "$INSTALL_DIR exists and isn't a git repo -- remove it or pass --dir <other path>"
+if [[ "$SETUP_PUBLISHER" -eq 1 ]]; then
+  # Full clone: the native venv step below needs shared/ + stream-publisher/
+  # source on disk.
+  if [[ -d "$INSTALL_DIR/.git" ]]; then
+    log "Repo already present at $INSTALL_DIR -- pulling latest $BRANCH..."
+    git -C "$INSTALL_DIR" fetch origin "$BRANCH"
+    git -C "$INSTALL_DIR" checkout "$BRANCH"
+    git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH"
+  elif [[ -e "$INSTALL_DIR" ]]; then
+    die "$INSTALL_DIR exists and isn't a git repo -- remove it or pass --dir <other path>"
+  else
+    log "Cloning $REPO_URL (branch $BRANCH) into $INSTALL_DIR..."
+    git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+  fi
 else
-  log "Cloning $REPO_URL (branch $BRANCH) into $INSTALL_DIR..."
-  git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+  # --skip-publisher: this box only runs `docker compose up` against the
+  # published GHCR images (see infra/docker-compose.yml's api/frontend
+  # `image:`), so it never needs backend-webserver/frontend/stream-publisher/
+  # shared source -- a shallow, blobless, sparse clone of just infra/ and
+  # install/ is enough and is far smaller/faster than the whole repo.
+  if [[ -d "$INSTALL_DIR/.git" ]]; then
+    log "Repo already present at $INSTALL_DIR -- pulling latest $BRANCH (sparse: infra/, install/)..."
+    git -C "$INSTALL_DIR" sparse-checkout set infra install 2>/dev/null || true
+    git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH"
+    git -C "$INSTALL_DIR" checkout "$BRANCH"
+    git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
+  elif [[ -e "$INSTALL_DIR" ]]; then
+    die "$INSTALL_DIR exists and isn't a git repo -- remove it or pass --dir <other path>"
+  else
+    log "Sparse-cloning $REPO_URL (branch $BRANCH, infra/ + install/ only) into $INSTALL_DIR..."
+    git clone --branch "$BRANCH" --depth 1 --filter=blob:none --sparse "$REPO_URL" "$INSTALL_DIR"
+    git -C "$INSTALL_DIR" sparse-checkout set infra install
+  fi
 fi
 
 if [[ "$TARGET_USER" != "root" ]]; then
@@ -146,7 +176,6 @@ fi
 # ── 6. infra/.env ──────────────────────────────────────────────────────────
 ENV_FILE="$INSTALL_DIR/infra/.env"
 ENV_EXAMPLE="$INSTALL_DIR/infra/.env.example"
-FRONTEND_NEEDS_REBUILD=0
 if [[ ! -f "$ENV_FILE" ]]; then
   log "Creating infra/.env from infra/.env.example..."
   cp "$ENV_EXAMPLE" "$ENV_FILE"
@@ -163,7 +192,6 @@ fi
 # an IP change automatically instead of silently going stale.
 LAN_IP="$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i !~ /^127\./) {print $i; exit}}')"
 if [[ -n "$LAN_IP" ]]; then
-  OLD_VITE_URL="$(grep -oP '(?<=^VITE_API_BASE_URL=).*' "$ENV_FILE" 2>/dev/null || true)"
   sed -i "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://${LAN_IP}:7880|" "$ENV_FILE"
   sed -i "s|node_ip:.*|node_ip: ${LAN_IP}|" "$INSTALL_DIR/infra/docker/livekit.yaml" 2>/dev/null || true
   if grep -q '^VITE_API_BASE_URL=' "$ENV_FILE"; then
@@ -174,8 +202,9 @@ if [[ -n "$LAN_IP" ]]; then
     # append it explicitly.
     echo "VITE_API_BASE_URL=http://${LAN_IP}:8000" >> "$ENV_FILE"
   fi
-  NEW_VITE_URL="$(grep -oP '(?<=^VITE_API_BASE_URL=).*' "$ENV_FILE" 2>/dev/null || true)"
-  [[ "$OLD_VITE_URL" != "$NEW_VITE_URL" ]] && FRONTEND_NEEDS_REBUILD=1
+  # Read at container start by the frontend image's entrypoint (see
+  # frontend/docker/docker-entrypoint.d) -- no rebuild needed when this
+  # changes, just a restart (step 9 below always restarts the service).
   log "Set LiveKit + API LAN IP to $LAN_IP in infra/.env (edit it yourself if you'd rather pin a fixed hostname)."
 fi
 
@@ -206,11 +235,6 @@ sed \
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
-
-if [[ "$FRONTEND_NEEDS_REBUILD" -eq 1 ]]; then
-  log "VITE_API_BASE_URL changed -- rebuilding frontend image so it's baked into the bundle..."
-  "$DOCKER_BIN" compose -f "$INSTALL_DIR/infra/docker-compose.yml" --env-file "$ENV_FILE" build frontend
-fi
 
 if [[ "$START_SERVICE" -eq 1 ]]; then
   log "Starting $SERVICE_NAME (docker compose up -d)..."
