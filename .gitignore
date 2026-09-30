@@ -1,2 +1,17 @@
 *.mp4
 .DS_Store
+
+# Python (shared/, backend-webserver/, stream-publisher/)
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+dist/
+build/
+*.log
+
+# Env
+.env
+infra/.env

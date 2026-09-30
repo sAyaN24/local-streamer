@@ -1,0 +1,22 @@
+[project]
+name = "streammark-publisher"
+version = "0.1.0"
+description = "Capture-card/webcam video ingestion service that publishes a live feed into a LiveKit room, plus pupil-tracking overlay data"
+requires-python = ">=3.12"
+dependencies = [
+    "streammark-shared",
+    "livekit==1.1.13",
+    "opencv-python==5.0.0.93",
+    "numpy==2.5.1",
+    "pygrabber==0.2; sys_platform == 'win32'",
+]
+
+[project.scripts]
+streammark-ingest = "streammark_publisher.ingest.main:cli"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

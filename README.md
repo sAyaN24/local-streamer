@@ -5,6 +5,20 @@ pupil-tracking overlay. The stack (LiveKit, MongoDB, API, frontend) runs in
 Docker; the video publisher runs either as a container (dummy video) or
 natively (live capture card).
 
+## Repository layout
+
+- [`infra/`](infra) — Docker Compose stack, Dockerfiles, LiveKit config, and
+  the orchestration scripts (`start*.sh`) that bring everything up.
+- [`backend-webserver/`](backend-webserver) — FastAPI room/auth/token service
+  (`streammark-api`), plus its DB-backed tools (`streammark-logger-bot`,
+  `streammark-mint-token`).
+- [`stream-publisher/`](stream-publisher) — capture-card/webcam video
+  ingestion (`streammark-ingest`) and its dev helpers (dummy video publisher,
+  capture-device auto-detect). Always runs natively, never in a container.
+- [`shared/`](shared) — config, logging, and LiveKit token-minting code used
+  by both `backend-webserver` and `stream-publisher`.
+- [`frontend/`](frontend) — the React/Vite viewer, dashboard, and annotation UI.
+
 ## Prerequisites
 
 - **Docker** with Compose. Verify with `docker compose version`. If that prints
@@ -18,13 +32,15 @@ natively (live capture card).
   natively (Docker cannot pass a USB capture device through on macOS/Windows).
   Not needed for dummy-video mode. macOS ships 3.9, so install a newer one:
   `brew install python@3.12`.
-- `backend/.env` — see `backend/README.md` for the full variable list.
+- `infra/.env` — copy from `infra/.env.example` and fill in real secrets; see
+  that file for the full variable list.
 
 ## Running
 
-Both launchers auto-detect the machine's LAN IP and rewrite it into `.env`,
-`docker/livekit.yaml`, and `docker-compose.yml`, so other devices on the same
-network can connect. Pass an IP explicitly to override.
+All launchers auto-detect the machine's LAN IP and rewrite it into
+`infra/.env`, `infra/docker/livekit.yaml`, and `infra/docker-compose.yml`, so
+other devices on the same network can connect. Pass an IP explicitly to
+override.
 
 Each script starts with `docker compose down`, so it replaces any running stack.
 
@@ -34,18 +50,18 @@ Runs the full stack plus a containerized publisher that loops a local video
 file into `demo-room`. Everything runs in Docker; no local Python required.
 
 ```bash
-bash backend/scripts/start.sh                 # auto-detect LAN IP
-bash backend/scripts/start.sh 192.168.0.108   # explicit IP
+bash infra/scripts/start.sh                 # auto-detect LAN IP
+bash infra/scripts/start.sh 192.168.0.108   # explicit IP
 ```
 
 Choose the video with `DUMMY_PUBLISHER_VIDEO_FILE` / `DUMMY_PUBLISHER_VIDEO_DIR`
-in `backend/.env` (directory defaults to `../../Vision`). The file must be
+in `infra/.env` (directory defaults to `../../Vision`). The file must be
 **progressive** — see Troubleshooting.
 
 To (re)start only the publisher against an already-running stack:
 
 ```bash
-cd backend
+cd infra
 docker compose --profile demo up -d --build dummy-publisher
 ```
 
@@ -55,9 +71,9 @@ Runs the full stack **without** any dummy video, then publishes the real
 capture card into `demo-room` via `streammark-ingest`.
 
 ```bash
-bash backend/scripts/start_capture.sh                             # auto-detect
-bash backend/scripts/start_capture.sh 192.168.0.108               # explicit IP
-bash backend/scripts/start_capture.sh 192.168.0.108 /dev/video0   # explicit device
+bash infra/scripts/start_capture.sh                             # auto-detect
+bash infra/scripts/start_capture.sh 192.168.0.108               # explicit IP
+bash infra/scripts/start_capture.sh 192.168.0.108 /dev/video0   # explicit device
 ```
 
 The second argument overrides device detection — a `/dev/videoN` path on Linux,
@@ -67,8 +83,8 @@ or an integer index on macOS/Windows. Tune the feed with `ROOM`, `CAP_WIDTH`,
 
 Before publishing, the script pre-flights the device: it opens it, samples
 frames, and **aborts if every frame is black** rather than streaming a blank
-feed. It also creates the venv with a Python >= 3.12 interpreter, recreating an
-older one if present.
+feed. It also creates the venv (under `stream-publisher/.venv`) with a
+Python >= 3.12 interpreter, recreating an older one if present.
 
 ### Option C — webcam
 
@@ -76,9 +92,9 @@ Same as Option B, but publishes a built-in or plain USB webcam instead of a
 capture card.
 
 ```bash
-bash backend/scripts/start_webcam.sh                             # auto-detect
-bash backend/scripts/start_webcam.sh 192.168.0.108               # explicit IP
-bash backend/scripts/start_webcam.sh 192.168.0.108 0             # explicit device
+bash infra/scripts/start_webcam.sh                             # auto-detect
+bash infra/scripts/start_webcam.sh 192.168.0.108               # explicit IP
+bash infra/scripts/start_webcam.sh 192.168.0.108 0             # explicit device
 ```
 
 The only real difference from `start_capture.sh` is device selection: a capture
@@ -97,7 +113,7 @@ terminal access under System Settings > Privacy & Security > Camera.
 ### Stopping
 
 ```bash
-cd backend && docker compose --profile demo down
+cd infra && docker compose --profile demo down
 ```
 
 ## Access
@@ -141,17 +157,17 @@ pure black with no error anywhere. Check with
 See Prerequisites.
 
 **`pip install -e` fails / "editable mode requires setuptools"** — the venv is
-on a Python older than 3.12. Delete `backend/.venv` and re-create it with a
-newer interpreter; `start_capture.sh` does this automatically.
+on a Python older than 3.12. Delete `stream-publisher/.venv` and re-create it
+with a newer interpreter; `start_capture.sh` does this automatically.
 
 **Viewer shows nothing after restarting the publisher** — the browser is still
 subscribed to a track that no longer exists. Hard-reload the page.
 
 ## Helper processes
 
-**Dummy publisher** (`backend/scripts/dummy_publisher.py`) — feeds a local video
-file into a LiveKit room as a visible publisher, so you can test the
-viewer/annotation flow without capture-card hardware:
+**Dummy publisher** (`stream-publisher/scripts/dummy_publisher.py`) — feeds a
+local video file into a LiveKit room as a visible publisher, so you can test
+the viewer/annotation flow without capture-card hardware:
 
 ```bash
 python scripts/dummy_publisher.py --room demo-room --video /path/to/sample.mp4
@@ -161,8 +177,9 @@ The target room must already exist in the API before you point the publisher at
 it. `demo-room` is created and set live by the seed service.
 
 **Logger bot** (`streammark-logger-bot`, entry point
-`src/streammark/tools/logger_bot.py`) — joins as a hidden, data-only participant
-and persists every annotation event to MongoDB's `annotations` collection:
+`backend-webserver/src/streammark_webserver/tools/logger_bot.py`) — joins as a
+hidden, data-only participant and persists every annotation event to
+MongoDB's `annotations` collection:
 
 ```bash
 streammark-logger-bot --room demo-room --out annotations.log
@@ -170,10 +187,19 @@ streammark-logger-bot --room demo-room --out annotations.log
 
 `--out` is optional (mirrors events to a local JSON-lines file for debugging).
 
-Both need `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` (from `.env`)
-and a Python >= 3.12 env with the project installed:
+Both need `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` (from
+`infra/.env`) and a Python >= 3.12 env with the relevant packages installed —
+`logger-bot` lives in `backend-webserver`, `dummy_publisher.py` in
+`stream-publisher`:
 
 ```bash
+# logger-bot / mint-token
+cd backend-webserver
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ../shared -e ".[dev]"
+
+# dummy publisher / streammark-ingest
+cd stream-publisher
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ../shared -e .
 ```
