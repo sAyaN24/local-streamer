@@ -103,36 +103,6 @@ services:
       api:
         condition: service_healthy
 
-  # Dev-only: loops a local video file into 'demo-room' as a visible publisher (see
-  # scripts/dummy_publisher.py) so the viewer/annotation/pupil-tracking flow can be exercised
-  # without capture-card hardware. Opt-in via the 'demo' profile -- not started by a plain
-  # `docker compose up`, since it assumes a specific video file exists on the host -- run with:
-  #   docker compose --profile demo up -d --build dummy-publisher
-  # Override DUMMY_PUBLISHER_VIDEO_DIR/DUMMY_PUBLISHER_VIDEO_FILE to point at a different clip.
-  dummy-publisher:
-    build:
-      # Repo root: this image needs both shared/ and stream-publisher/ as
-      # siblings (see infra/docker/dummy-publisher.Dockerfile).
-      context: ..
-      dockerfile: infra/docker/dummy-publisher.Dockerfile
-    container_name: streammark-dummy-publisher
-    restart: unless-stopped
-    networks:
-      - streammark_net
-    env_file: .env
-    environment:
-      # Internal service-name address, same reasoning as api's LIVEKIT_URL_INTERNAL: this
-      # container reaches livekit over the bridge network, not the LAN IP browsers use.
-      LIVEKIT_URL: ws://livekit:7880
-    volumes:
-      - ${DUMMY_PUBLISHER_VIDEO_DIR:-../../Vision}:/video:ro
-    command: ["--room", "demo-room", "--video", "/video/${DUMMY_PUBLISHER_VIDEO_FILE:-210526-1254.mp4}"]
-    depends_on:
-      seed:
-        condition: service_completed_successfully
-    profiles:
-      - demo
-
   # One-shot dev convenience: creates a demo host account + a live 'demo-room' so `docker
   # compose up` gives you something to look at immediately. Idempotent (scripts/seed_demo_room.py
   # tolerates the account/room already existing), so it's safe on every `up`, not just the first.
@@ -158,23 +128,8 @@ networks:
 volumes:
   mongo-data:
 
-# The ingest service intentionally is NOT defined here by default. It needs direct
-# access to the capture card's /dev/videoN device node, so it should run natively on
-# the capture host:
+# The ingest service intentionally is NOT defined here: it needs direct access to
+# the capture card's /dev/videoN device node, so it always runs natively on the
+# capture host (see infra/scripts/start_capture.sh), never in a container:
 #
 #   streammark-ingest --room <name> --device /dev/video0
-#
-# Opt-in containerized fallback, if you must containerize it (adjust device path):
-#
-#  ingest:
-#    build:
-#      context: ..
-#      dockerfile: infra/docker/dummy-publisher.Dockerfile   # same base image; override the entrypoint/command
-#    entrypoint: ["streammark-ingest"]
-#    command: ["--room", "shared-stream"]
-#    network_mode: host
-#    devices:
-#      - "/dev/video0:/dev/video0"
-#    group_add:
-#      - "video"
-#    env_file: .env

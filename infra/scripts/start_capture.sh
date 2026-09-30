@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/start_capture.sh [device-ip] [capture-device-override]
 #
-# Full-stack launcher for LIVE CAPTURE-CARD input (no dummy video anywhere).
-# Standalone sibling of start.sh/start_live.sh; it does not source or modify them.
+# Full-stack launcher for LIVE CAPTURE-CARD input.
+# Standalone sibling of start_live.sh; it does not source or modify it.
 #
 # 1. Resolves a working docker compose invocation (plugin or standalone binary)
 # 2. Rewrites the LAN IP in .env, livekit.yaml, and docker-compose.yml
-# 3. Rebuilds and (re)starts the Docker stack, explicitly WITHOUT the dummy publisher
+# 3. (Re)starts the Docker stack (api/frontend pull the published GHCR images)
 # 4. Waits for the seed service to finish (demo-room ready)
 # 5. Finds a Python >=3.12 interpreter and prepares the venv
 # 6. Detects the capture card (V4L2 on Linux, AVFoundation index on macOS, DirectShow on Windows)
@@ -118,18 +118,15 @@ sed -i.bak "s|VITE_API_BASE_URL:-http://[^:]*:8000|VITE_API_BASE_URL:-http://$IP
 rm -f "$ENV_FILE.bak" "$LIVEKIT_YAML.bak" "$COMPOSE_FILE.bak"
 echo "    .env, docker/livekit.yaml, docker-compose.yml updated"
 
-# ── 2. Rebuild and start the stack (live services only) ───────────────────────
-# The 'demo' profile is deliberately NOT passed: dummy-publisher only starts when
-# that profile is requested, so a plain `up` gives a stack with no synthetic video.
-# The explicit `down` also tears down a dummy-publisher left running by start.sh.
+# ── 2. Start the stack (live services only) ────────────────────────────────
 echo ""
-echo "==> Stopping any existing stack (including a leftover dummy publisher)..."
+echo "==> Stopping any existing stack..."
 cd "$INFRA_DIR"
-"${COMPOSE[@]}" --profile demo down --remove-orphans
+"${COMPOSE[@]}" down --remove-orphans
 
 echo ""
-echo "==> Rebuilding and starting Docker stack (live capture mode, no dummy video)..."
-VITE_API_BASE_URL="http://$IP:8000" "${COMPOSE[@]}" up --build -d livekit mongo api frontend seed
+echo "==> Starting Docker stack (live capture mode)..."
+VITE_API_BASE_URL="http://$IP:8000" "${COMPOSE[@]}" up -d livekit mongo api frontend seed
 
 # ── 3. Wait for seed service to finish ────────────────────────────────────────
 echo ""
@@ -380,7 +377,7 @@ if [[ $PREFLIGHT -ne 0 ]]; then
   echo ""
   echo "Aborting before publish: the capture device would stream an unusable feed."
   echo "The Docker stack is still running -- fix the device and re-run this script,"
-  echo "or stop the stack with: ${COMPOSE[*]} --profile demo down"
+  echo "or stop the stack with: ${COMPOSE[*]} down"
   exit 1
 fi
 

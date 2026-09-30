@@ -21,9 +21,7 @@
 #                        install/ instead of the whole repo, since the Docker
 #                        Compose stack runs off the published GHCR images and
 #                        doesn't need backend-webserver/frontend/stream-
-#                        publisher source at all. (The dummy-publisher demo
-#                        profile needs that source to build, so it isn't
-#                        available on a --skip-publisher install.)
+#                        publisher source at all.
 #   --no-start           Install everything but don't start the service yet
 #                        (use this if you still need to edit infra/.env)
 #

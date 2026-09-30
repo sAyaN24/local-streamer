@@ -2,8 +2,7 @@
 
 LiveKit-powered capture-card streaming with a real-time annotation and
 pupil-tracking overlay. The stack (LiveKit, MongoDB, API, frontend) runs in
-Docker; the video publisher runs either as a container (dummy video) or
-natively (live capture card).
+Docker; the video publisher (the capture card) always runs natively.
 
 ## Repository layout
 
@@ -12,9 +11,9 @@ natively (live capture card).
 - [`backend-webserver/`](backend-webserver) — FastAPI room/auth/token service
   (`streammark-api`), plus its DB-backed tools (`streammark-logger-bot`,
   `streammark-mint-token`).
-- [`stream-publisher/`](stream-publisher) — capture-card/webcam video
-  ingestion (`streammark-ingest`) and its dev helpers (dummy video publisher,
-  capture-device auto-detect). Always runs natively, never in a container.
+- [`stream-publisher/`](stream-publisher) — capture-card video ingestion
+  (`streammark-ingest`) and its capture-device auto-detect helper. Always
+  runs natively, never in a container.
 - [`shared/`](shared) — config, logging, and LiveKit token-minting code used
   by both `backend-webserver` and `stream-publisher`.
 - [`frontend/`](frontend) — the React/Vite viewer, dashboard, and annotation UI.
@@ -28,47 +27,19 @@ natively (live capture card).
   mkdir -p ~/.docker/cli-plugins
   ln -sf "$(command -v docker-compose)" ~/.docker/cli-plugins/docker-compose
   ```
-- **Python >= 3.12** — only needed for live capture-card mode, which must run
-  natively (Docker cannot pass a USB capture device through on macOS/Windows).
-  Not needed for dummy-video mode. macOS ships 3.9, so install a newer one:
+- **Python >= 3.12** — needed to run the capture-card publisher, which must
+  run natively (Docker cannot pass a USB capture device through on
+  macOS/Windows). macOS ships 3.9, so install a newer one:
   `brew install python@3.12`.
 - `infra/.env` — copy from `infra/.env.example` and fill in real secrets; see
   that file for the full variable list.
 
 ## Running
 
-All launchers auto-detect the machine's LAN IP and rewrite it into
+`start_capture.sh` auto-detects the machine's LAN IP and rewrites it into
 `infra/.env`, `infra/docker/livekit.yaml`, and `infra/docker-compose.yml`, so
 other devices on the same network can connect. Pass an IP explicitly to
-override.
-
-Each script starts with `docker compose down`, so it replaces any running stack.
-
-### Option A — dummy video (no hardware)
-
-Runs the full stack plus a containerized publisher that loops a local video
-file into `demo-room`. Everything runs in Docker; no local Python required.
-
-```bash
-bash infra/scripts/start.sh                 # auto-detect LAN IP
-bash infra/scripts/start.sh 192.168.0.108   # explicit IP
-```
-
-Choose the video with `DUMMY_PUBLISHER_VIDEO_FILE` / `DUMMY_PUBLISHER_VIDEO_DIR`
-in `infra/.env` (directory defaults to `../../Vision`). The file must be
-**progressive** — see Troubleshooting.
-
-To (re)start only the publisher against an already-running stack:
-
-```bash
-cd infra
-docker compose --profile demo up -d --build dummy-publisher
-```
-
-### Option B — live capture card
-
-Runs the full stack **without** any dummy video, then publishes the real
-capture card into `demo-room` via `streammark-ingest`.
+override. It starts with `docker compose down`, so it replaces any running stack.
 
 ```bash
 bash infra/scripts/start_capture.sh                             # auto-detect
@@ -86,34 +57,10 @@ frames, and **aborts if every frame is black** rather than streaming a blank
 feed. It also creates the venv (under `stream-publisher/.venv`) with a
 Python >= 3.12 interpreter, recreating an older one if present.
 
-### Option C — webcam
-
-Same as Option B, but publishes a built-in or plain USB webcam instead of a
-capture card.
-
-```bash
-bash infra/scripts/start_webcam.sh                             # auto-detect
-bash infra/scripts/start_webcam.sh 192.168.0.108               # explicit IP
-bash infra/scripts/start_webcam.sh 192.168.0.108 0             # explicit device
-```
-
-The only real difference from `start_capture.sh` is device selection: a capture
-card enumerates *after* the built-in camera, so `start_capture.sh` prefers the
-highest working index while `start_webcam.sh` prefers a webcam-looking name and
-falls back to the **lowest** working index. Defaults are also webcam-friendly —
-1280x720 @ 30fps, since most webcams negotiate 720p far more reliably than
-1080p. Override with the same `ROOM`, `CAP_WIDTH`, `CAP_HEIGHT`, `CAP_FPS`
-environment variables.
-
-The same pre-flight runs before publishing. If it aborts with an all-black
-frame, the usual causes are a closed privacy shutter, another app (Zoom, Teams,
-OBS) holding the camera, or a denied OS camera permission — on macOS, grant your
-terminal access under System Settings > Privacy & Security > Camera.
-
 ### Stopping
 
 ```bash
-cd infra && docker compose --profile demo down
+cd infra && docker compose down
 ```
 
 ## Access
@@ -140,18 +87,9 @@ interlaced. OpenCV cannot deinterlace: `sws_scale` fails per frame and returns a
 zeroed buffer while `cap.read()` still reports success, so the stack streams
 pure black with no error anywhere. Check with
 `ffprobe -show_entries stream=field_order <file>` — anything other than
-`progressive` (e.g. `tt`, `bb`) will fail. Fixes:
-
-- Capture card: set the source to a progressive mode (1080p, not 1080i).
-- Video file: transcode once with a deinterlace filter.
-  ```bash
-  ffmpeg -i input.mp4 -vf "yadif=0,scale=1280:720" -r 30 -an \
-         -c:v libx264 -crf 23 output.mp4
-  ```
-  1280x720 matches the publisher's internal frame size, so downscaling here
-  costs nothing.
-
-`start_capture.sh` detects this before publishing; `start.sh` does not.
+`progressive` (e.g. `tt`, `bb`) will fail. Fix by setting the capture card's
+source to a progressive mode (1080p, not 1080i). `start_capture.sh` detects
+this before publishing.
 
 **`unknown flag: --remove-orphans`** — the Docker CLI has no Compose plugin.
 See Prerequisites.
@@ -165,17 +103,6 @@ subscribed to a track that no longer exists. Hard-reload the page.
 
 ## Helper processes
 
-**Dummy publisher** (`stream-publisher/scripts/dummy_publisher.py`) — feeds a
-local video file into a LiveKit room as a visible publisher, so you can test
-the viewer/annotation flow without capture-card hardware:
-
-```bash
-python scripts/dummy_publisher.py --room demo-room --video /path/to/sample.mp4
-```
-
-The target room must already exist in the API before you point the publisher at
-it. `demo-room` is created and set live by the seed service.
-
 **Logger bot** (`streammark-logger-bot`, entry point
 `backend-webserver/src/streammark_webserver/tools/logger_bot.py`) — joins as a
 hidden, data-only participant and persists every annotation event to
@@ -187,19 +114,12 @@ streammark-logger-bot --room demo-room --out annotations.log
 
 `--out` is optional (mirrors events to a local JSON-lines file for debugging).
 
-Both need `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` (from
-`infra/.env`) and a Python >= 3.12 env with the relevant packages installed —
-`logger-bot` lives in `backend-webserver`, `dummy_publisher.py` in
-`stream-publisher`:
+It needs `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` (from
+`infra/.env`) and a Python >= 3.12 env with `backend-webserver`'s packages
+installed:
 
 ```bash
-# logger-bot / mint-token
 cd backend-webserver
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ../shared -e ".[dev]"
-
-# dummy publisher / streammark-ingest
-cd stream-publisher
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ../shared -e .
 ```

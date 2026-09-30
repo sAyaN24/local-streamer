@@ -1,14 +1,9 @@
 # streammark-publisher
 
-Capture-card/webcam video ingestion: publishes a live feed (plus pupil-tracking
+Capture-card video ingestion: publishes a live feed (plus pupil-tracking
 overlay data on the `pupil` data-channel topic) into a LiveKit room. Ships the
-`streammark-ingest` CLI, and two dev scripts under `scripts/`:
-
-- `scripts/dummy_publisher.py` — loops a local video file into a room instead
-  of a real capture device, for exercising the viewer/annotation flow without
-  hardware.
-- `scripts/detect_capture_device.py` — auto-detects which camera index/device
-  path is the external capture card.
+`streammark-ingest` CLI, and `scripts/detect_capture_device.py`, which
+auto-detects which camera index/device path is the external capture card.
 
 This package **must run natively**, not in a container: Docker cannot pass a
 USB capture device through to a container on macOS/Windows. See the root

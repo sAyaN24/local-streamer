@@ -1,7 +1,7 @@
 [project]
 name = "streammark-publisher"
 version = "0.1.0"
-description = "Capture-card/webcam video ingestion service that publishes a live feed into a LiveKit room, plus pupil-tracking overlay data"
+description = "Capture-card video ingestion service that publishes a live feed into a LiveKit room, plus pupil-tracking overlay data"
 requires-python = ">=3.12"
 dependencies = [
     "streammark-shared",
