@@ -1,4 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
+// Runtime config (window.__RUNTIME_CONFIG__, from public/config.js) wins when
+// present -- it's how the Docker image gets its API URL without a rebuild.
+// Falls back to the build-time Vite env var for local dev / non-Docker builds.
+const BASE_URL = window.__RUNTIME_CONFIG__?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
 
 export class ApiError extends Error {
   constructor(status, detail) {

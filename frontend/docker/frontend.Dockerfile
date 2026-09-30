@@ -18,6 +18,11 @@ RUN npm run build
 # --- final: just the static output behind nginx, no node/npm/build toolchain ---
 FROM nginx:alpine AS final
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Picked up automatically by nginx's own /docker-entrypoint.sh (runs every
+# *.sh here before starting nginx) -- regenerates config.js from $API_BASE_URL
+# at container start so this image needs no rebuild per deployment/LAN.
+COPY docker/docker-entrypoint.d/20-generate-runtime-config.sh /docker-entrypoint.d/20-generate-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/20-generate-runtime-config.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 5173

@@ -1,0 +1,4 @@
+# Shell scripts must stay LF -- they run inside Linux containers/hosts, and
+# core.autocrlf=true on a Windows checkout would otherwise inject CRLF and
+# break `sh` (e.g. the frontend image's docker-entrypoint.d scripts).
+*.sh text eol=lf

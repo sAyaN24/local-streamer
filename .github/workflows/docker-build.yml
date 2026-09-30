@@ -1,0 +1,129 @@
+name: Build and publish Docker images
+
+# Builds the backend (streammark-api) and frontend images and pushes them to
+# GitHub Container Registry as packages of this repository:
+#   ghcr.io/<owner>/<repo>-backend
+#   ghcr.io/<owner>/<repo>-frontend
+#
+# Pushes to GHCR only happen on `actions` and on version tags -- PR builds
+# just verify the images build cleanly, mirroring the split used for
+# build-only vs publish workflows elsewhere in CI.
+# NOTE: trigger branch is `actions` for now to test this workflow directly;
+# switch back to `main` once verified.
+
+on:
+  push:
+    branches: [actions]
+    tags: ["v*.*.*"]
+    paths:
+      - "backend-webserver/**"
+      - "shared/**"
+      - "frontend/**"
+      - "infra/docker/api.Dockerfile"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    branches: [actions]
+    paths:
+      - "backend-webserver/**"
+      - "shared/**"
+      - "frontend/**"
+      - "infra/docker/api.Dockerfile"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  backend:
+    name: Build backend image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/api.Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+  frontend:
+    name: Build frontend image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # No VITE_API_BASE_URL build-arg here on purpose: the API URL varies per
+      # deployment's LAN, so it can't be baked in at CI build time. The image
+      # reads it at `docker run`/compose time instead via the $API_BASE_URL
+      # env var (see frontend/docker/docker-entrypoint.d) -- falls back to
+      # the Dockerfile's built-in http://localhost:8000 default if unset.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/docker/frontend.Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
