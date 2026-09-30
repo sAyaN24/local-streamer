@@ -185,6 +185,16 @@ else
   log "infra/.env already exists -- leaving secrets as-is, refreshing LAN IP below."
 fi
 
+# Migration: older versions of this script auto-set VITE_API_BASE_URL to this
+# box's LAN IP. That's no longer needed (or wanted) now that the proxy service
+# puts the frontend and API on the same origin -- and a leftover value here
+# would silently override the frontend's same-origin default, pointing it at
+# the no-longer-published :8000 instead. Comment it out if still present.
+if grep -q '^VITE_API_BASE_URL=' "$ENV_FILE"; then
+  sed -i 's|^VITE_API_BASE_URL=|#VITE_API_BASE_URL=|' "$ENV_FILE"
+  log "Commented out a leftover VITE_API_BASE_URL in infra/.env (no longer needed -- see infra/README.md)."
+fi
+
 # Re-derive the LAN IP every run (not just on first creation) so a re-run of
 # this script -- e.g. after a reboot changed the box's DHCP lease -- picks up
 # an IP change automatically instead of silently going stale. Only
