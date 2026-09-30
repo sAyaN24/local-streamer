@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import AuthCard from '../components/AuthCard.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ApiError } from '../api/client.js'
@@ -36,14 +36,6 @@ export default function Login() {
     <AuthCard
       title="Welcome back"
       subtitle="Log in to join or host a live session."
-      footer={
-        <>
-          Don’t have an account?{' '}
-          <Link to="/signup" className="font-semibold text-brand-600 hover:underline dark:text-brand-400">
-            Sign up
-          </Link>
-        </>
-      }
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
