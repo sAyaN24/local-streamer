@@ -66,7 +66,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -110,7 +110,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       # No VITE_API_BASE_URL build-arg here on purpose: the API URL varies per
       # deployment's LAN, so it can't be baked in at CI build time. The image
