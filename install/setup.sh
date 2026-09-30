@@ -154,7 +154,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
   if [[ -n "$LAN_IP" ]]; then
     sed -i "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://${LAN_IP}:7880|" "$ENV_FILE"
     sed -i "s|node_ip:.*|node_ip: ${LAN_IP}|" "$INSTALL_DIR/infra/docker/livekit.yaml" 2>/dev/null || true
-    log "Set LiveKit LAN IP to $LAN_IP in infra/.env (override later if this box's IP changes)."
+    sed -i "s|VITE_API_BASE_URL=http://[^:]*:8000|VITE_API_BASE_URL=http://${LAN_IP}:8000|" "$ENV_FILE"
+    log "Set LiveKit + API LAN IP to $LAN_IP in infra/.env (override later if this box's IP changes)."
   fi
 
   warn "infra/.env still has the example LIVEKIT_API_SECRET / AUTH_JWT_SECRET" \
