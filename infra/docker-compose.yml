@@ -45,11 +45,14 @@ services:
       retries: 5
 
   api:
-    build:
-      # Repo root: this image needs both shared/ and backend-webserver/ as
-      # siblings (see infra/docker/api.Dockerfile).
-      context: ..
-      dockerfile: infra/docker/api.Dockerfile
+    # Built by .github/workflows/docker-build.yml and published as a package
+    # of this repo. Override with API_IMAGE in .env to pin a specific tag
+    # (e.g. a version tag instead of :latest). If the GHCR package is
+    # private, `docker login ghcr.io` on this box first or make it public.
+    image: ${API_IMAGE:-ghcr.io/sayan24/local-streamer-backend:latest}
+    # Without this, compose only pulls when the image is missing locally --
+    # it won't notice a newer `latest` was published. Always check instead.
+    pull_policy: always
     container_name: streammark-api
     restart: unless-stopped
     networks:
@@ -74,16 +77,12 @@ services:
         condition: service_healthy
 
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: docker/frontend.Dockerfile
-      args:
-        # Vite inlines this at build time, so the compiled bundle is pinned to
-        # whatever URL you build with. For LAN access from other devices, set
-        # this to the host's LAN IP (e.g. `VITE_API_BASE_URL=http://192.168.1.2:8000
-        # docker compose build frontend`). Defaults to localhost so a plain
-        # `docker compose up --build` at least works from the host itself.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    # Built by .github/workflows/docker-build.yml and published as a package
+    # of this repo. Override with FRONTEND_IMAGE in .env to pin a specific
+    # tag. If the GHCR package is private, `docker login ghcr.io` on this box
+    # first or make it public.
+    image: ${FRONTEND_IMAGE:-ghcr.io/sayan24/local-streamer-frontend:latest}
+    pull_policy: always
     container_name: streammark-frontend
     restart: unless-stopped
     networks:
@@ -92,6 +91,14 @@ services:
       # nginx binds to 5173 inside the container (not :80 -- rootless Docker
       # can't bind privileged ports); publish it on the host's :5173.
       - "5173:5173"
+    environment:
+      # Read at container start by the image's entrypoint (regenerates
+      # config.js), not baked in at build time -- so the same image works on
+      # any LAN. For LAN access from other devices, set this to the host's
+      # LAN IP (e.g. VITE_API_BASE_URL=http://192.168.1.2:8000). Defaults to
+      # localhost so a plain `docker compose up` at least works from the host
+      # itself.
+      API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     depends_on:
       api:
         condition: service_healthy
