@@ -148,7 +148,7 @@ fi
 echo ""
 echo "==> Stack is up. Services:"
 echo "    LiveKit  ws://$IP:7880"
-echo "    App      http://$IP:8080  (frontend + API, via the proxy service)"
+echo "    App      http://$IP  (frontend + API, via the proxy service)"
 
 # ── 5. Detect capture card ────────────────────────────────────────────────────
 # A short grace pause: if a previous ingest process was just killed, some cheap

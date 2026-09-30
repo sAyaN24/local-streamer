@@ -162,7 +162,7 @@ done
 echo ""
 echo "==> Stack is up. Services:"
 echo "    LiveKit  ws://$IP:7880"
-echo "    App      http://$IP:8080/room/$ROOM  (frontend + API, via the proxy service)"
+echo "    App      http://$IP/room/$ROOM  (frontend + API, via the proxy service)"
 
 # ── 4. Python environment ─────────────────────────────────────────────────────
 # streammark-ingest MUST run natively, not in a container: Docker Desktop on
@@ -385,7 +385,7 @@ fi
 # ── 7. Start the live ingest publisher ────────────────────────────────────────
 echo ""
 echo "==> Starting streammark-ingest from capture device '$DEVICE' (Ctrl+C to stop)..."
-echo "    Watch at: http://$IP:8080/room/$ROOM"
+echo "    Watch at: http://$IP/room/$ROOM"
 echo ""
 exec streammark-ingest \
   --room "$ROOM" \

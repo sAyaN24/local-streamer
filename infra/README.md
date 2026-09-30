@@ -27,5 +27,5 @@ folder just holds the pieces:
 
 Run `bash scripts/start_capture.sh` from this directory, or
 `bash infra/scripts/start_capture.sh` from the repo root. Once up, everything
-is reachable at `http://<LAN-IP>:8080/` (frontend) and
-`http://<LAN-IP>:8080/api/...` (API) -- see `docker/proxy.conf`.
+is reachable at `http://<LAN-IP>/` (frontend) and
+`http://<LAN-IP>/api/...` (API) -- see `docker/proxy.conf`.

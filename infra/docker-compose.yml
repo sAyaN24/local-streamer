@@ -107,9 +107,12 @@ services:
     networks:
       - streammark_net
     ports:
-      # Not :80 -- rootless Docker can't bind privileged ports (same
-      # reasoning as frontend's own nginx; see frontend/docker/nginx.conf).
-      - "8080:8080"
+      # Host :80 -> container :8080. nginx itself still listens on the
+      # unprivileged 8080 inside the container (rootless Docker can't bind
+      # <1024 there -- same reasoning as frontend's own nginx; see
+      # frontend/docker/nginx.conf); only the HOST-side mapping is :80, which
+      # doesn't require the container process itself to bind a low port.
+      - "80:8080"
     volumes:
       - ./docker/proxy.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:

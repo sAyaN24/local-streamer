@@ -74,9 +74,9 @@ by the frontend itself, only by your browser to reach it:
 
 | What | URL |
 |---|---|
-| Viewer (no login) | `http://<IP>:8080/room/demo-room` |
-| Login / dashboard | `http://<IP>:8080/login` |
-| API | `http://<IP>:8080/api/...` |
+| Viewer (no login) | `http://<IP>/room/demo-room` |
+| Login / dashboard | `http://<IP>/login` |
+| API | `http://<IP>/api/...` |
 | LiveKit signaling | `ws://<IP>:7880` |
 
 The seed service creates a demo host account on every start:
