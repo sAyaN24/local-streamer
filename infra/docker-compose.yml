@@ -57,10 +57,8 @@ services:
     restart: unless-stopped
     networks:
       - streammark_net
-    ports:
-      # Bind to 0.0.0.0:8000 so browsers on other LAN devices can reach the API
-      # at http://<host-lan-ip>:8000.
-      - "8000:8000"
+    # No host port published: browsers reach this through the proxy service's
+    # /api/ route instead (see docker/proxy.conf), not directly.
     env_file: .env
     # MONGODB_URI: rewritten to the bridge service name (only used server-side).
     # LIVEKIT_URL_INTERNAL: what THIS container uses for server-to-server calls
@@ -87,19 +85,41 @@ services:
     restart: unless-stopped
     networks:
       - streammark_net
-    ports:
-      # nginx binds to 5173 inside the container (not :80 -- rootless Docker
-      # can't bind privileged ports); publish it on the host's :5173.
-      - "5173:5173"
+    # No host port published: reached through the proxy service instead (see
+    # docker/proxy.conf), which also puts it on the same origin as /api/ --
+    # so the frontend's default same-origin API URL just works, no LAN IP
+    # needed. VITE_API_BASE_URL in .env remains as an escape hatch (e.g. the
+    # API is hosted elsewhere) but is unset/unused by default.
     environment:
-      # Read at container start by the image's entrypoint (regenerates
-      # config.js), not baked in at build time -- so the same image works on
-      # any LAN. For LAN access from other devices, set this to the host's
-      # LAN IP (e.g. VITE_API_BASE_URL=http://192.168.1.2:8000). Defaults to
-      # localhost so a plain `docker compose up` at least works from the host
-      # itself.
-      API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+      API_BASE_URL: ${VITE_API_BASE_URL:-}
     depends_on:
+      api:
+        condition: service_healthy
+
+  # Single entry point for both the frontend and the API (backend under
+  # /api/) -- see docker/proxy.conf. This is the only HTTP port meant to be
+  # published to the LAN; api/frontend are reachable only inside the compose
+  # network.
+  proxy:
+    image: nginx:alpine
+    container_name: streammark-proxy
+    restart: unless-stopped
+    networks:
+      - streammark_net
+    ports:
+      # Not :80 -- rootless Docker can't bind privileged ports (same
+      # reasoning as frontend's own nginx; see frontend/docker/nginx.conf).
+      - "8080:8080"
+    volumes:
+      - ./docker/proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      frontend:
+        condition: service_healthy
       api:
         condition: service_healthy
 

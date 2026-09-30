@@ -73,25 +73,26 @@ SHARED_DIR="$REPO_ROOT/shared"
 PUBLISHER_DIR="$REPO_ROOT/stream-publisher"
 ENV_FILE="$INFRA_DIR/.env"
 LIVEKIT_YAML="$INFRA_DIR/docker/livekit.yaml"
-COMPOSE_FILE="$INFRA_DIR/docker-compose.yml"
 VENV="$PUBLISHER_DIR/.venv"
 
 # ── 1. Update IP in config files ──────────────────────────────────────────────
+# Only LIVEKIT_URL needs the LAN IP: browsers connect to LiveKit's WS/RTC
+# signaling directly. The API URL doesn't -- the frontend defaults to
+# same-origin /api/ (see frontend/src/api/client.js), reached through the
+# proxy service, so no IP needs to be baked in for it at all.
 echo "==> Updating IP to $IP in config files..."
 sed -i.bak "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://$IP:7880|" "$ENV_FILE"
 echo "    .env updated"
 sed -i.bak "s|node_ip:.*|node_ip: $IP|" "$LIVEKIT_YAML"
 echo "    docker/livekit.yaml updated"
-sed -i.bak "s|VITE_API_BASE_URL:-http://[^:]*:8000|VITE_API_BASE_URL:-http://$IP:8000|" "$COMPOSE_FILE"
-echo "    docker-compose.yml updated"
-rm -f "$ENV_FILE.bak" "$LIVEKIT_YAML.bak" "$COMPOSE_FILE.bak"
+rm -f "$ENV_FILE.bak" "$LIVEKIT_YAML.bak"
 
-# ── 2. Rebuild and start Docker stack (frontend + backend) ───────────────────
+# ── 2. Start Docker stack (frontend + backend) ────────────────────────────────
 echo ""
-echo "==> Rebuilding and starting Docker stack..."
+echo "==> Starting Docker stack..."
 cd "$INFRA_DIR"
 docker compose down --remove-orphans
-VITE_API_BASE_URL="http://$IP:8000" docker compose up --build -d
+docker compose up -d
 
 # ── 3. Wait for seed service to finish (demo-room ready) ─────────────────────
 echo ""
@@ -147,8 +148,7 @@ fi
 echo ""
 echo "==> Stack is up. Services:"
 echo "    LiveKit  ws://$IP:7880"
-echo "    API      http://$IP:8000"
-echo "    Frontend http://$IP:5173"
+echo "    App      http://$IP:8080  (frontend + API, via the proxy service)"
 
 # ── 5. Detect capture card ────────────────────────────────────────────────────
 # A short grace pause: if a previous ingest process was just killed, some cheap

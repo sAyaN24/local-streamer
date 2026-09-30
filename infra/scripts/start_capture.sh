@@ -23,7 +23,6 @@ SHARED_DIR="$REPO_ROOT/shared"
 PUBLISHER_DIR="$REPO_ROOT/stream-publisher"
 ENV_FILE="$INFRA_DIR/.env"
 LIVEKIT_YAML="$INFRA_DIR/docker/livekit.yaml"
-COMPOSE_FILE="$INFRA_DIR/docker-compose.yml"
 VENV="$PUBLISHER_DIR/.venv"
 
 ROOM="${ROOM:-demo-room}"
@@ -110,13 +109,16 @@ fi
 CAPTURE_OVERRIDE="${2:-}"
 
 # ── 1. Update IP in config files ──────────────────────────────────────────────
+# Only LIVEKIT_URL needs the LAN IP: browsers connect to LiveKit's WS/RTC
+# signaling directly. The API URL doesn't -- the frontend defaults to
+# same-origin /api/ (see frontend/src/api/client.js), reached through the
+# proxy service, so no IP needs to be baked in for it at all.
 echo ""
 echo "==> Updating IP to $IP in config files..."
 sed -i.bak "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://$IP:7880|" "$ENV_FILE"
 sed -i.bak "s|node_ip:.*|node_ip: $IP|" "$LIVEKIT_YAML"
-sed -i.bak "s|VITE_API_BASE_URL:-http://[^:]*:8000|VITE_API_BASE_URL:-http://$IP:8000|" "$COMPOSE_FILE"
-rm -f "$ENV_FILE.bak" "$LIVEKIT_YAML.bak" "$COMPOSE_FILE.bak"
-echo "    .env, docker/livekit.yaml, docker-compose.yml updated"
+rm -f "$ENV_FILE.bak" "$LIVEKIT_YAML.bak"
+echo "    .env, docker/livekit.yaml updated"
 
 # ── 2. Start the stack (live services only) ────────────────────────────────
 echo ""
@@ -126,7 +128,7 @@ cd "$INFRA_DIR"
 
 echo ""
 echo "==> Starting Docker stack (live capture mode)..."
-VITE_API_BASE_URL="http://$IP:8000" "${COMPOSE[@]}" up -d livekit mongo api frontend seed
+"${COMPOSE[@]}" up -d livekit mongo api frontend proxy seed
 
 # ── 3. Wait for seed service to finish ────────────────────────────────────────
 echo ""
@@ -160,8 +162,7 @@ done
 echo ""
 echo "==> Stack is up. Services:"
 echo "    LiveKit  ws://$IP:7880"
-echo "    API      http://$IP:8000"
-echo "    Frontend http://$IP:5173/room/$ROOM"
+echo "    App      http://$IP:8080/room/$ROOM  (frontend + API, via the proxy service)"
 
 # ── 4. Python environment ─────────────────────────────────────────────────────
 # streammark-ingest MUST run natively, not in a container: Docker Desktop on
@@ -384,7 +385,7 @@ fi
 # ── 7. Start the live ingest publisher ────────────────────────────────────────
 echo ""
 echo "==> Starting streammark-ingest from capture device '$DEVICE' (Ctrl+C to stop)..."
-echo "    Watch at: http://$IP:5173/room/$ROOM"
+echo "    Watch at: http://$IP:8080/room/$ROOM"
 echo ""
 exec streammark-ingest \
   --room "$ROOM" \

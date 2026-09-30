@@ -1,13 +1,16 @@
 # StreamMark — local streamer
 
 LiveKit-powered capture-card streaming with a real-time annotation and
-pupil-tracking overlay. The stack (LiveKit, MongoDB, API, frontend) runs in
-Docker; the video publisher (the capture card) always runs natively.
+pupil-tracking overlay. The stack (LiveKit, MongoDB, API, frontend, and an
+nginx proxy in front of both frontend and API) runs in Docker; the video
+publisher (the capture card) always runs natively.
 
 ## Repository layout
 
 - [`infra/`](infra) — Docker Compose stack, Dockerfiles, LiveKit config, and
-  the orchestration scripts (`start*.sh`) that bring everything up.
+  the orchestration scripts (`start*.sh`) that bring everything up. `proxy`
+  is the single HTTP entry point: `/` routes to the frontend, `/api/` to the
+  backend.
 - [`backend-webserver/`](backend-webserver) — FastAPI room/auth/token service
   (`streammark-api`), plus its DB-backed tools (`streammark-logger-bot`,
   `streammark-mint-token`).
@@ -65,13 +68,15 @@ cd infra && docker compose down
 
 ## Access
 
-With the stack up (substitute your LAN IP):
+With the stack up (substitute your LAN IP). Frontend and API share one origin
+via the `proxy` service (backend under `/api/`) — no LAN IP needs to be known
+by the frontend itself, only by your browser to reach it:
 
 | What | URL |
 |---|---|
-| Viewer (no login) | `http://<IP>:5173/room/demo-room` |
-| Login / dashboard | `http://<IP>:5173/login` |
-| API | `http://<IP>:8000` |
+| Viewer (no login) | `http://<IP>:8080/room/demo-room` |
+| Login / dashboard | `http://<IP>:8080/login` |
+| API | `http://<IP>:8080/api/...` |
 | LiveKit signaling | `ws://<IP>:7880` |
 
 The seed service creates a demo host account on every start:

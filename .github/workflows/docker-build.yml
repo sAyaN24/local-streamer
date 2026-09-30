@@ -113,10 +113,11 @@ jobs:
             type=raw,value=latest
 
       # No VITE_API_BASE_URL build-arg here on purpose: the API URL varies per
-      # deployment's LAN, so it can't be baked in at CI build time. The image
-      # reads it at `docker run`/compose time instead via the $API_BASE_URL
-      # env var (see frontend/docker/docker-entrypoint.d) -- falls back to
-      # the Dockerfile's built-in http://localhost:8000 default if unset.
+      # deployment. The image reads an override at `docker run`/compose time
+      # instead via the $API_BASE_URL env var (see
+      # frontend/docker/docker-entrypoint.d), and falls back to same-origin
+      # /api/ if unset -- correct when served through the proxy service
+      # (infra/docker/proxy.conf), which is the default deployment shape.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:

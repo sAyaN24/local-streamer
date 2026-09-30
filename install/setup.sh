@@ -187,23 +187,16 @@ fi
 
 # Re-derive the LAN IP every run (not just on first creation) so a re-run of
 # this script -- e.g. after a reboot changed the box's DHCP lease -- picks up
-# an IP change automatically instead of silently going stale.
+# an IP change automatically instead of silently going stale. Only
+# LIVEKIT_URL needs it: browsers connect to LiveKit's WS/RTC signaling
+# directly. The API URL doesn't -- the frontend defaults to same-origin
+# /api/ (see frontend/src/api/client.js), reached through the proxy service
+# (infra/docker/proxy.conf), so no IP needs to be baked in for it at all.
 LAN_IP="$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i !~ /^127\./) {print $i; exit}}')"
 if [[ -n "$LAN_IP" ]]; then
   sed -i "s|LIVEKIT_URL=ws://[^:]*:7880|LIVEKIT_URL=ws://${LAN_IP}:7880|" "$ENV_FILE"
   sed -i "s|node_ip:.*|node_ip: ${LAN_IP}|" "$INSTALL_DIR/infra/docker/livekit.yaml" 2>/dev/null || true
-  if grep -q '^VITE_API_BASE_URL=' "$ENV_FILE"; then
-    sed -i "s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://${LAN_IP}:8000|" "$ENV_FILE"
-  else
-    # Older infra/.env predates this variable (its .env.example didn't have
-    # it yet) -- sed's s|| would silently no-op instead of adding it, so
-    # append it explicitly.
-    echo "VITE_API_BASE_URL=http://${LAN_IP}:8000" >> "$ENV_FILE"
-  fi
-  # Read at container start by the frontend image's entrypoint (see
-  # frontend/docker/docker-entrypoint.d) -- no rebuild needed when this
-  # changes, just a restart (step 9 below always restarts the service).
-  log "Set LiveKit + API LAN IP to $LAN_IP in infra/.env (edit it yourself if you'd rather pin a fixed hostname)."
+  log "Set LiveKit LAN IP to $LAN_IP in infra/.env (edit it yourself if you'd rather pin a fixed hostname)."
 fi
 
 # ── 7. Native venv for the capture-card publisher (optional) ─────────────

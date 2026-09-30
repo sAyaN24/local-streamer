@@ -7,10 +7,13 @@ RUN npm ci
 
 COPY . .
 
-# Vite inlines VITE_* vars into the bundle at build time, not read at container runtime --
-# override via `docker build --build-arg VITE_API_BASE_URL=https://api.example.com` when
-# building for anything other than a same-host backend on :8000.
-ARG VITE_API_BASE_URL=http://localhost:8000
+# Vite inlines VITE_* vars into the bundle at build time, not read at container runtime.
+# Left empty by default: src/api/client.js then falls back to same-origin /api/ at
+# runtime, which is correct when served through the proxy service (see
+# infra/docker/proxy.conf) -- no LAN IP needs to be baked in at all. Override via
+# `docker build --build-arg VITE_API_BASE_URL=https://api.example.com` only if the
+# API is genuinely hosted somewhere other than this same origin's /api/.
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build
