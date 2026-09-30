@@ -1,0 +1,82 @@
+name: Build and release publisher executable
+
+# Builds a single-file Linux x86_64 executable of the capture-card publisher
+# (streammark-publisher: auto-detects the capture card and starts publishing,
+# see stream-publisher/packaging/) via PyInstaller, for machines that only
+# run the publisher and shouldn't need a Python toolchain installed.
+#
+# Uploaded as a workflow artifact on every run; attached to a GitHub Release
+# on version tags.
+#
+# NOTE: trigger branch is `actions` for now to test this workflow directly;
+# switch back to `main` once verified (mirrors docker-build.yml).
+
+on:
+  push:
+    branches: [actions]
+    tags: ["v*.*.*"]
+    paths:
+      - "stream-publisher/**"
+      - "shared/**"
+      - ".github/workflows/build-publisher.yml"
+  pull_request:
+    branches: [actions]
+    paths:
+      - "stream-publisher/**"
+      - "shared/**"
+      - ".github/workflows/build-publisher.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Build Linux x86_64 executable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system libraries (opencv-python runtime deps)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+
+      - name: Install streammark-shared + streammark-publisher[build]
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./shared -e "./stream-publisher[build]"
+
+      - name: Build executable
+        working-directory: stream-publisher/packaging
+        run: pyinstaller --noconfirm streammark_publisher.spec
+
+      - name: Stage release files
+        run: |
+          mkdir -p dist-out
+          cp stream-publisher/packaging/dist/streammark-publisher dist-out/streammark-publisher-linux-x86_64
+          chmod +x dist-out/streammark-publisher-linux-x86_64
+          cp stream-publisher/packaging/.env.example dist-out/.env.example
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: streammark-publisher-linux-x86_64
+          path: dist-out/
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            dist-out/streammark-publisher-linux-x86_64
+            dist-out/.env.example
+          generate_release_notes: true

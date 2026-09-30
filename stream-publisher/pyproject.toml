@@ -13,6 +13,10 @@ dependencies = [
 
 [project.scripts]
 streammark-ingest = "streammark_publisher.ingest.main:cli"
+streammark-publish = "streammark_publisher.ingest.autopublish:cli"
+
+[project.optional-dependencies]
+build = ["pyinstaller==6.16.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
