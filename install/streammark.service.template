@@ -12,7 +12,12 @@ WorkingDirectory=__INSTALL_DIR__/infra
 ExecStart=__DOCKER_BIN__ compose -f docker-compose.yml --env-file .env up -d --remove-orphans
 ExecStop=__DOCKER_BIN__ compose -f docker-compose.yml down
 ExecReload=__DOCKER_BIN__ compose -f docker-compose.yml up -d --remove-orphans
-TimeoutStartSec=300
+# Generous headroom for a cold start: pulling livekit/mongo/nginx base images
+# plus the api/frontend/proxy images (pull_policy: always re-checks GHCR on
+# every start, not just the first) and working through the health-gated
+# startup chain (livekit+mongo -> api -> frontend -> proxy) can take a while
+# on a slow network or an under-powered box.
+TimeoutStartSec=600
 TimeoutStopSec=60
 
 [Install]
