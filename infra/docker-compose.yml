@@ -127,15 +127,22 @@ services:
         condition: service_healthy
 
   # One-shot setup step: creates the first admin account (see scripts/seed_admin.py) so
-  # there's an /admin login right after `docker compose up`. Idempotent -- the backend's
-  # /auth/setup-admin only ever creates the first admin -- so safe on every `up`, not just
-  # the first. Credentials are printed to this container's logs on first run only:
-  # `docker compose logs seed-admin`.
+  # there's an /admin login right after `docker compose up`. Safe on every `up`, not just
+  # the first: by default it's idempotent (the backend's /auth/setup-admin only ever
+  # creates the first admin), UNLESS ADMIN_RESET=1 -- that resets the existing admin's
+  # password instead, printing the new one to this container's logs. ADMIN_RESET is
+  # deliberately NOT in .env/the image's default environment: it's passed in only by
+  # install/setup.sh's own explicit (manual) re-run, via `ADMIN_RESET=1 docker compose
+  # up ...` -- never by this routine `up`, which is what runs unattended on every boot
+  # via the streammark systemd service. If it defaulted on, the admin password would
+  # silently change on every reboot. Credentials: `docker compose logs seed-admin`.
   seed-admin:
     image: python:3.12-slim
     container_name: streammark-seed-admin
     network_mode: "service:api"
     env_file: .env
+    environment:
+      ADMIN_RESET: ${ADMIN_RESET:-}
     volumes:
       - ./scripts/seed_admin.py:/seed_admin.py:ro
     depends_on:

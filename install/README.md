@@ -49,9 +49,9 @@ What it does:
    the `demo-room` room, and keeps retrying (every 10s, indefinitely) if no
    usable card is found yet, so plugging one in later (or replugging it)
    just gets picked up on the next retry with no manual restart needed.
-9. Creates the admin account (see `infra/scripts/seed_admin.py`) and prints
-   its email/password at the very end of setup, under "Admin login" — see
-   below.
+9. Creates the admin account (or, on a re-run, resets its password — see
+   `infra/scripts/seed_admin.py`) and prints its email/password at the very
+   end of setup, under "Admin login" — see below.
 
 Useful flags: `--repo <url>`, `--branch <name>`, `--dir <path>`,
 `--skip-publisher`, `--no-start` (install everything but don't start yet —
@@ -62,15 +62,19 @@ use this if you want to edit `infra/.env` first). See `setup.sh --help`.
 `LIVEKIT_API_SECRET` / `AUTH_JWT_SECRET` values, then
 `sudo systemctl restart streammark`.
 
-**Admin login:** `setup.sh` prints the admin email/password once, right at
-the end of its own output, under an "Admin login" banner — copy it from
-there. This only happens on the run that actually creates the account: a
-later re-run of `setup.sh` prints "admin account already existed" instead,
-without the password, since there's no way to recover or reset it once
-shown (the server only ever stores a bcrypt hash, never the plaintext). If
-you miss it, your options are: check your terminal's scrollback, or add a
-replacement admin from `/admin` using a different admin login if you have
-one. Set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `infra/.env` beforehand if you'd rather
+**Admin login:** `setup.sh` prints the admin email/password at the end of
+its own output, under an "Admin login" banner — copy it from there. Forgot
+it, or just want a fresh one? Re-run `sudo bash setup.sh --branch actions`
+(or whatever `--branch`/flags you used originally) — every explicit re-run
+of `setup.sh` **resets** the admin password and prints the new one, since
+the server only ever stores a bcrypt hash (never the plaintext), so there's
+no way to recover the old one, only replace it. This reset is tied
+specifically to running `setup.sh` yourself: it does **not** happen on an
+ordinary reboot or an unattended `docker compose up` (see the `ADMIN_RESET`
+comment in `infra/docker-compose.yml` if you're curious how that's kept
+separate) — your admin password stays stable across reboots and only
+changes when you deliberately run the installer again. Set
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` in `infra/.env` beforehand if you'd rather
 pick them yourself instead of getting a random generated password.
 
 ## Manage the service

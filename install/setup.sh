@@ -334,23 +334,24 @@ else
 fi
 
 step "10. Admin account"
-# seed_admin.py (run once by the 'seed-admin' compose service) prints the
-# admin email/password to that one-shot container's own logs on first
-# creation only -- see infra/scripts/seed_admin.py. Wait for it to finish and
-# pull those credentials out so this script can show them once, right here,
-# instead of making every install dig through `docker compose logs`.
+# seed_admin.py prints the admin email/password to the 'seed-admin' container's own
+# logs -- see infra/scripts/seed_admin.py. Wait for it to finish and pull those
+# credentials out so this script can show them once, right here, instead of making
+# every install dig through `docker compose logs`.
 ADMIN_EMAIL_OUT=""
 ADMIN_PASSWORD_OUT=""
-ADMIN_ALREADY_EXISTED=0
 if [[ "$START_SERVICE" -eq 1 ]]; then
-  log "Re-running seed-admin to read back the admin credentials..."
-  # --force-recreate: guarantees a fresh run (and therefore fresh, trustworthy
-  # logs below) on every invocation of this script, rather than assuming
-  # compose already re-ran it as part of the main service restart above --
-  # e.g. after a data wipe + reinstall, an unchanged compose config might
-  # otherwise leave a stale (but still "exited") container with months-old
-  # logs in place, which would print an admin password that's no longer real.
-  (cd "$INSTALL_DIR/infra" && "$DOCKER_BIN" compose -f docker-compose.yml --env-file .env up -d --force-recreate seed-admin) \
+  log "Re-running seed-admin (resetting the admin password so it can be shown here)..."
+  # ADMIN_RESET=1: an admin always already exists on a re-run of this script, and
+  # without this the backend's /auth/setup-admin would just 409 with nothing to show.
+  # Scoped to ONLY this one explicit, manual invocation (shell-env prefix, never
+  # written to infra/.env) -- see the ADMIN_RESET comments in docker-compose.yml and
+  # seed_admin.py for why it must never default on for the routine `docker compose
+  # up` a reboot triggers unattended via the streammark systemd service.
+  # --force-recreate also guarantees a fresh run (and therefore fresh, trustworthy
+  # logs below) regardless of whether compose already ran this container as part of
+  # the main service restart above.
+  (cd "$INSTALL_DIR/infra" && ADMIN_RESET=1 "$DOCKER_BIN" compose -f docker-compose.yml --env-file .env up -d --force-recreate seed-admin) \
     || warn "could not re-run the seed-admin container -- check it manually:" \
             "  docker compose -f $INSTALL_DIR/infra/docker-compose.yml logs seed-admin"
 
@@ -372,11 +373,6 @@ if [[ "$START_SERVICE" -eq 1 ]]; then
   SEED_ADMIN_LOG="$(docker logs streammark-seed-admin 2>/dev/null || true)"
   ADMIN_EMAIL_OUT="$(sed -n 's/^ *email: *//p' <<<"$SEED_ADMIN_LOG" | tail -1)"
   ADMIN_PASSWORD_OUT="$(sed -n 's/^ *password: *//p' <<<"$SEED_ADMIN_LOG" | tail -1)"
-  if [[ -z "$ADMIN_EMAIL_OUT" || -z "$ADMIN_PASSWORD_OUT" ]]; then
-    ADMIN_ALREADY_EXISTED=1
-    ADMIN_EMAIL_OUT=""
-    ADMIN_PASSWORD_OUT=""
-  fi
 else
   log "Skipping (--no-start) -- the admin account is created on first 'docker compose up'."
 fi
@@ -398,14 +394,17 @@ if [[ -n "$PUBLISHER_SERVICE_NAME" ]]; then
 fi
 if [[ -n "$ADMIN_EMAIL_OUT" && -n "$ADMIN_PASSWORD_OUT" ]]; then
   echo -e "$DIVIDER"
-  echo -e "${BOLD}${GREEN}  Admin login -- shown once, save it now${RESET}"
+  echo -e "${BOLD}${GREEN}  Admin login${RESET}"
   echo -e "    Email:    ${BOLD}${YELLOW}$ADMIN_EMAIL_OUT${RESET}"
   echo -e "    Password: ${BOLD}${YELLOW}$ADMIN_PASSWORD_OUT${RESET}"
   echo "    Log in, then open /admin to add further users."
-elif [[ "$ADMIN_ALREADY_EXISTED" -eq 1 ]]; then
+  echo "    Note: every re-run of this script resets this password to a new"
+  echo "    one (or back to ADMIN_PASSWORD in infra/.env, if you've pinned"
+  echo "    it there) -- it only ever changes when you run setup.sh yourself,"
+  echo "    never on an ordinary reboot."
+else
   echo -e "$DIVIDER"
-  echo "  Admin account already existed -- password unchanged, not re-shown here."
-  echo "  Forgot it? There's no reset flow yet -- add a replacement admin from"
-  echo "  /admin using another admin login, or see infra/scripts/seed_admin.py."
+  echo "  Couldn't confirm the admin account/password this run -- check:"
+  echo "    docker compose -f $INSTALL_DIR/infra/docker-compose.yml logs seed-admin"
 fi
 echo -e "$DIVIDER"

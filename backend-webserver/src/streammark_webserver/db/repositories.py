@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Literal
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 
 RoomStatus = Literal["scheduled", "live", "ended"]
 
@@ -42,6 +43,13 @@ class UserRepository:
 
     async def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         return await self._col.find_one({"_id": user_id})
+
+    async def set_password_hash(self, email: str, password_hash: str) -> dict[str, Any] | None:
+        return await self._col.find_one_and_update(
+            {"email": email.lower()},
+            {"$set": {"password_hash": password_hash}},
+            return_document=ReturnDocument.AFTER,
+        )
 
     async def list(self) -> list[dict[str, Any]]:
         return await self._col.find().sort("created_at", 1).to_list(length=None)
