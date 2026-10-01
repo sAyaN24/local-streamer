@@ -21,7 +21,10 @@ import urllib.error
 import urllib.request
 
 BASE_URL = f"http://localhost:{os.environ.get('API_PORT', '8000')}"
-EMAIL = os.environ.get("ADMIN_EMAIL", "admin@streammark.local")
+# .example, not .local: email-validator (used by the API's EmailStr fields) hard-rejects
+# .local as an RFC 6762 mDNS special-use domain; .example is the one reserved-for-docs TLD
+# it deliberately does not reject (see its SPECIAL_USE_DOMAIN_NAMES list).
+EMAIL = os.environ.get("ADMIN_EMAIL", "admin@streammark.example")
 NAME = os.environ.get("ADMIN_NAME", "Admin")
 PASSWORD = os.environ.get("ADMIN_PASSWORD") or secrets.token_urlsafe(12)
 
