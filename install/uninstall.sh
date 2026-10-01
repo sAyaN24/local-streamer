@@ -110,11 +110,27 @@ if [[ -f "$PUB_UNIT_PATH" ]]; then
 fi
 
 # ── 3. Built images ────────────────────────────────────────────────────────
-if command -v docker &>/dev/null; then
-  log "Removing images built for this project (streammark-*)..."
-  docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-    | awk '/^streammark-/{print $2}' \
-    | xargs -r docker rmi -f || true
+if command -v docker &>/dev/null && [[ -f "$COMPOSE_FILE" ]]; then
+  log "Removing this project's own images (ghcr.io/.../local-streamer-*)..."
+  # Resolved via `compose config --images` (not a hardcoded repo/tag), because
+  # the actual pulled image names (ghcr.io/sayan24/local-streamer-backend,
+  # ...-frontend) never matched a "streammark-*" filter -- that prefix only
+  # ever matched this project's container names, not its image repositories,
+  # so this step was silently a no-op from the start. Only removes images
+  # with "local-streamer-" in the name, not the generic upstream base images
+  # (mongo, livekit, nginx, python) compose also pulls, which other things on
+  # this box might equally depend on.
+  IMAGES="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config --images 2>/dev/null \
+    | grep -i 'local-streamer-' | sort -u || true)"
+  if [[ -n "$IMAGES" ]]; then
+    echo "$IMAGES" | xargs -r docker rmi -f || true
+  else
+    warn "no local-streamer-* images found to remove (already gone, or never pulled)."
+  fi
+elif command -v docker &>/dev/null; then
+  warn "compose file not found at $COMPOSE_FILE -- skipping image cleanup." \
+       "If $INSTALL_DIR is already gone, any pulled images are now orphaned;" \
+       "remove manually with: docker image prune -a"
 fi
 
 # ── 4. Repo directory ───────────────────────────────────────────────────────
@@ -140,8 +156,11 @@ if [[ "$PURGE_PACKAGES" -eq 1 ]]; then
     rm -rf /var/lib/docker /var/lib/containerd
     rm -f /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc
   else
-    warn "no infra/apt/sources.list.d/docker.list -- Docker wasn't installed by" \
-         "setup.sh (or repo file already gone); leaving it alone."
+    warn "no /etc/apt/sources.list.d/docker.list -- Docker wasn't installed by" \
+         "setup.sh (or that apt source file is already gone); leaving it alone." \
+         "(/var/lib/docker is NOT wiped in this case, so this project's own" \
+         "images may still be sitting there -- step 3 above already handles" \
+         "the ones that step cares about, or run: docker image prune -a)"
   fi
 
   DEADSNAKES_LIST=(/etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-*.list)
