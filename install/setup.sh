@@ -33,6 +33,38 @@
 
 set -euo pipefail
 
+# ── Colors ──────────────────────────────────────────────────────────────────
+# Disabled when not an interactive terminal or NO_COLOR is set (see
+# https://no-color.org), so piping/redirecting this script's output (e.g.
+# `setup.sh | tee install.log`) never ends up full of raw escape codes.
+if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]] && command -v tput &>/dev/null \
+   && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
+  BOLD="$(tput bold)"; RESET="$(tput sgr0)"
+  RED="$(tput setaf 1)"; GREEN="$(tput setaf 2)"
+  YELLOW="$(tput setaf 3)"; CYAN="$(tput setaf 6)"
+else
+  BOLD=""; RESET=""; RED=""; GREEN=""; YELLOW=""; CYAN=""
+fi
+
+log()  { echo -e "\n${GREEN}${BOLD}==>${RESET} $*"; }
+warn() { echo -e "\n${YELLOW}${BOLD}!!${RESET} ${YELLOW}$*${RESET}" >&2; }
+die()  { echo -e "\n${RED}${BOLD}Error:${RESET} ${RED}$*${RESET}" >&2; exit 1; }
+step() { echo -e "\n${CYAN}${BOLD}== $* ==========================================${RESET}"; }
+
+banner() {
+  echo -e "${CYAN}${BOLD}"
+  cat <<'EOF'
+ ____  _                            __  __            _
+/ ___|| |_ _ __ ___  __ _ _ __ ___ |  \/  | __ _ _ __| | __
+\___ \| __| '__/ _ \/ _` | '_ ` _ \| |\/| |/ _` | '__| |/ /
+ ___) | |_| | |  __/ (_| | | | | | | |  | | (_| | |  |   <
+|____/ \__|_|  \___|\__,_|_| |_| |_|_|  |_|\__,_|_|  |_|\_\
+EOF
+  echo -e "${RESET}${BOLD}  Local Streamer installer${RESET}"
+}
+
+banner
+
 REPO_URL="${REPO_URL:-https://github.com/sAyaN24/local-streamer.git}"
 BRANCH="main"
 INSTALL_DIR="/opt/local-streamer"
@@ -52,10 +84,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-log() { echo -e "\n==> $*"; }
-warn() { echo -e "\n!! $*" >&2; }
-die() { echo -e "\nError: $*" >&2; exit 1; }
-
 [[ $EUID -eq 0 ]] || die "must be run as root (try: sudo bash $0)"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,7 +92,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # used to own the cloned repo so it stays editable without sudo afterwards.
 TARGET_USER="${SUDO_USER:-root}"
 
-# ── 1. OS check ────────────────────────────────────────────────────────────
+step "1. OS check"
 [[ -r /etc/os-release ]] || die "unsupported OS: /etc/os-release not found"
 # shellcheck disable=SC1091
 . /etc/os-release
@@ -76,14 +104,14 @@ log "Detected OS: ${PRETTY_NAME:-$ID}"
 
 export DEBIAN_FRONTEND=noninteractive
 
-# ── 2. Base packages ──────────────────────────────────────────────────────
+step "2. Base packages"
 log "Installing base packages (git, curl, ca-certificates, python3)..."
 apt-get update -y
 apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg git lsb-release software-properties-common \
   python3 python3-venv python3-pip build-essential
 
-# ── 3. Python >= 3.12 (backend-webserver/shared/stream-publisher require it) ─
+step "3. Python >= 3.12 (backend-webserver/shared/stream-publisher require it)"
 PYTHON_BIN=""
 if command -v python3.12 &>/dev/null; then
   PYTHON_BIN=python3.12
@@ -107,7 +135,7 @@ if [[ -z "$PYTHON_BIN" ]]; then
 fi
 [[ -n "$PYTHON_BIN" ]] && log "Using $($PYTHON_BIN --version)"
 
-# ── 4. Docker Engine + Compose plugin (official apt repo) ────────────────
+step "4. Docker Engine + Compose plugin"
 if command -v docker &>/dev/null && docker compose version &>/dev/null; then
   log "Docker + Compose plugin already installed ($(docker --version))"
 else
@@ -134,7 +162,7 @@ fi
 
 DOCKER_BIN="$(command -v docker)"
 
-# video group: lets the capture-card publisher (step 8b below) open /dev/videoN
+# video group: lets the capture-card publisher (step 9 below) open /dev/videoN
 # without running as root. Harmless/no-op if the group doesn't exist (no V4L2
 # devices ever seen on this box) or the user is already in it.
 if [[ "$SETUP_PUBLISHER" -eq 1 ]] && [[ "$TARGET_USER" != "root" ]] \
@@ -145,7 +173,7 @@ if [[ "$SETUP_PUBLISHER" -eq 1 ]] && [[ "$TARGET_USER" != "root" ]] \
        "below runs as this user via systemd directly and is unaffected)."
 fi
 
-# ── 5. Clone or update the repo ───────────────────────────────────────────
+step "5. Clone or update the repo"
 if [[ "$SETUP_PUBLISHER" -eq 1 ]]; then
   # Full clone: the native venv step below needs shared/ + stream-publisher/
   # source on disk.
@@ -191,7 +219,7 @@ if [[ "$TARGET_USER" != "root" ]]; then
   chown -R "$TARGET_USER":"$TARGET_USER" "$INSTALL_DIR"
 fi
 
-# ── 6. infra/.env ──────────────────────────────────────────────────────────
+step "6. infra/.env"
 ENV_FILE="$INSTALL_DIR/infra/.env"
 ENV_EXAMPLE="$INSTALL_DIR/infra/.env.example"
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -229,7 +257,7 @@ if [[ -n "$LAN_IP" ]]; then
   log "Set LiveKit LAN IP to $LAN_IP in infra/.env (edit it yourself if you'd rather pin a fixed hostname)."
 fi
 
-# ── 7. Native venv for the capture-card publisher (optional) ─────────────
+step "7. Native venv for the capture-card publisher (optional)"
 if [[ "$SETUP_PUBLISHER" -eq 1 ]]; then
   log "Setting up native Python venv for stream-publisher (capture-card ingest)..."
   PUB_DIR="$INSTALL_DIR/stream-publisher"
@@ -243,7 +271,7 @@ else
   log "Skipping publisher venv setup (--skip-publisher or Python 3.12 unavailable)."
 fi
 
-# ── 8. systemd service ─────────────────────────────────────────────────────
+step "8. systemd service: Docker Compose stack"
 log "Installing systemd service '$SERVICE_NAME'..."
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 TEMPLATE="$SCRIPT_DIR/streammark.service.template"
@@ -266,7 +294,7 @@ else
       "  sudo systemctl start $SERVICE_NAME"
 fi
 
-# ── 8b. systemd service for the capture-card publisher ───────────────────
+step "9. systemd service: capture-card publisher"
 # Separate unit (not folded into the Docker stack's service above) because
 # streammark-publish must run natively -- see the venv step's own comment.
 # Restart=on-failure (set in the template) covers a capture card that isn't
@@ -305,7 +333,59 @@ else
   PUBLISHER_SERVICE_NAME=""
 fi
 
+step "10. Admin account"
+# seed_admin.py (run once by the 'seed-admin' compose service) prints the
+# admin email/password to that one-shot container's own logs on first
+# creation only -- see infra/scripts/seed_admin.py. Wait for it to finish and
+# pull those credentials out so this script can show them once, right here,
+# instead of making every install dig through `docker compose logs`.
+ADMIN_EMAIL_OUT=""
+ADMIN_PASSWORD_OUT=""
+ADMIN_ALREADY_EXISTED=0
+if [[ "$START_SERVICE" -eq 1 ]]; then
+  log "Re-running seed-admin to read back the admin credentials..."
+  # --force-recreate: guarantees a fresh run (and therefore fresh, trustworthy
+  # logs below) on every invocation of this script, rather than assuming
+  # compose already re-ran it as part of the main service restart above --
+  # e.g. after a data wipe + reinstall, an unchanged compose config might
+  # otherwise leave a stale (but still "exited") container with months-old
+  # logs in place, which would print an admin password that's no longer real.
+  (cd "$INSTALL_DIR/infra" && "$DOCKER_BIN" compose -f docker-compose.yml --env-file .env up -d --force-recreate seed-admin) \
+    || warn "could not re-run the seed-admin container -- check it manually:" \
+            "  docker compose -f $INSTALL_DIR/infra/docker-compose.yml logs seed-admin"
+
+  log "Waiting for the seed-admin container to finish..."
+  SEED_ADMIN_TIMEOUT=60
+  SEED_ADMIN_ELAPSED=0
+  while true; do
+    SEED_ADMIN_STATUS="$(docker inspect --format '{{.State.Status}}' streammark-seed-admin 2>/dev/null || echo "missing")"
+    [[ "$SEED_ADMIN_STATUS" == "exited" ]] && break
+    if [[ "$SEED_ADMIN_ELAPSED" -ge "$SEED_ADMIN_TIMEOUT" ]]; then
+      warn "timed out waiting for the seed-admin container -- check it manually:" \
+           "  docker compose -f $INSTALL_DIR/infra/docker-compose.yml logs seed-admin"
+      break
+    fi
+    sleep 2
+    SEED_ADMIN_ELAPSED=$((SEED_ADMIN_ELAPSED + 2))
+  done
+
+  SEED_ADMIN_LOG="$(docker logs streammark-seed-admin 2>/dev/null || true)"
+  ADMIN_EMAIL_OUT="$(sed -n 's/^ *email: *//p' <<<"$SEED_ADMIN_LOG" | tail -1)"
+  ADMIN_PASSWORD_OUT="$(sed -n 's/^ *password: *//p' <<<"$SEED_ADMIN_LOG" | tail -1)"
+  if [[ -z "$ADMIN_EMAIL_OUT" || -z "$ADMIN_PASSWORD_OUT" ]]; then
+    ADMIN_ALREADY_EXISTED=1
+    ADMIN_EMAIL_OUT=""
+    ADMIN_PASSWORD_OUT=""
+  fi
+else
+  log "Skipping (--no-start) -- the admin account is created on first 'docker compose up'."
+fi
+
 log "Done."
+DIVIDER="${CYAN}${BOLD}────────────────────────────────────────────────────────${RESET}"
+echo -e "$DIVIDER"
+echo -e "${BOLD}  Local Streamer (StreamMark) is ready${RESET}"
+echo -e "$DIVIDER"
 echo "  Install dir:  $INSTALL_DIR"
 echo "  Env file:     $ENV_FILE"
 echo "  Service:      systemctl {status|start|stop|restart} $SERVICE_NAME"
@@ -316,3 +396,16 @@ if [[ -n "$PUBLISHER_SERVICE_NAME" ]]; then
   echo "  Pub. logs:    journalctl -u $PUBLISHER_SERVICE_NAME -f"
   echo "  Pub. restart: automatic -- retries every 10s until a capture card is detected"
 fi
+if [[ -n "$ADMIN_EMAIL_OUT" && -n "$ADMIN_PASSWORD_OUT" ]]; then
+  echo -e "$DIVIDER"
+  echo -e "${BOLD}${GREEN}  Admin login -- shown once, save it now${RESET}"
+  echo -e "    Email:    ${BOLD}${YELLOW}$ADMIN_EMAIL_OUT${RESET}"
+  echo -e "    Password: ${BOLD}${YELLOW}$ADMIN_PASSWORD_OUT${RESET}"
+  echo "    Log in, then open /admin to add further users."
+elif [[ "$ADMIN_ALREADY_EXISTED" -eq 1 ]]; then
+  echo -e "$DIVIDER"
+  echo "  Admin account already existed -- password unchanged, not re-shown here."
+  echo "  Forgot it? There's no reset flow yet -- add a replacement admin from"
+  echo "  /admin using another admin login, or see infra/scripts/seed_admin.py."
+fi
+echo -e "$DIVIDER"

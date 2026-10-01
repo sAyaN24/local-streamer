@@ -49,6 +49,9 @@ What it does:
    the `demo-room` room, and keeps retrying (every 10s, indefinitely) if no
    usable card is found yet, so plugging one in later (or replugging it)
    just gets picked up on the next retry with no manual restart needed.
+9. Creates the admin account (see `infra/scripts/seed_admin.py`) and prints
+   its email/password at the very end of setup, under "Admin login" — see
+   below.
 
 Useful flags: `--repo <url>`, `--branch <name>`, `--dir <path>`,
 `--skip-publisher`, `--no-start` (install everything but don't start yet —
@@ -59,16 +62,15 @@ use this if you want to edit `infra/.env` first). See `setup.sh --help`.
 `LIVEKIT_API_SECRET` / `AUTH_JWT_SECRET` values, then
 `sudo systemctl restart streammark`.
 
-**Admin login:** the first `docker compose up` also creates an admin account
-(see `infra/scripts/seed_admin.py`) and prints its email/password once, to
-that one-shot container's own logs:
-
-```bash
-docker compose -f /opt/local-streamer/infra/docker-compose.yml logs seed-admin
-```
-
-Log in with those credentials and open `/admin` to add further users. Set
-`ADMIN_EMAIL` / `ADMIN_PASSWORD` in `infra/.env` beforehand if you'd rather
+**Admin login:** `setup.sh` prints the admin email/password once, right at
+the end of its own output, under an "Admin login" banner — copy it from
+there. This only happens on the run that actually creates the account: a
+later re-run of `setup.sh` prints "admin account already existed" instead,
+without the password, since there's no way to recover or reset it once
+shown (the server only ever stores a bcrypt hash, never the plaintext). If
+you miss it, your options are: check your terminal's scrollback, or add a
+replacement admin from `/admin` using a different admin login if you have
+one. Set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `infra/.env` beforehand if you'd rather
 pick them yourself instead of getting a random generated password.
 
 ## Manage the service
