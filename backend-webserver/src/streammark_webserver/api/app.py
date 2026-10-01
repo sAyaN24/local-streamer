@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
 
 from streammark_webserver.api.room_service import RoomServiceClient
+from streammark_webserver.api.routes.admin import router as admin_router
 from streammark_webserver.api.routes.auth import router as auth_router
 from streammark_webserver.api.routes.health import router as health_router
 from streammark_webserver.api.routes.rooms import router as rooms_router
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(auth_router, prefix="/auth", tags=["auth"])
     app.include_router(rooms_router, prefix="/rooms", tags=["rooms"])
+    app.include_router(admin_router, prefix="/admin", tags=["admin"])
     app.include_router(health_router, tags=["health"])
     return app
 

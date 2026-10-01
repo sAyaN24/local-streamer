@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 RoomStatus = Literal["scheduled", "live", "ended"]
+UserRole = Literal["admin", "user"]
 
 
 # --- Auth ---
@@ -24,6 +25,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     name: str
+    role: UserRole
     created_at: datetime
 
     @classmethod
@@ -32,6 +34,7 @@ class UserResponse(BaseModel):
             id=doc["_id"],
             email=doc["email"],
             name=doc["name"],
+            role=doc.get("role", "user"),
             created_at=datetime.fromtimestamp(doc["created_at"], tz=timezone.utc),
         )
 
@@ -40,6 +43,16 @@ class AuthResponse(BaseModel):
     user: UserResponse
     token: str
     expires_in_seconds: int
+
+
+# --- Admin ---
+
+
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    name: str = Field(..., min_length=1, max_length=128)
+    role: UserRole = "user"
 
 
 # --- Rooms ---

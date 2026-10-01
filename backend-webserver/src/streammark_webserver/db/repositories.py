@@ -23,12 +23,15 @@ class UserRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
         self._col = db["users"]
 
-    async def create(self, email: str, name: str, password_hash: str) -> dict[str, Any]:
+    async def create(
+        self, email: str, name: str, password_hash: str, role: str = "user"
+    ) -> dict[str, Any]:
         doc = {
             "_id": new_id(),
             "email": email.lower(),
             "name": name,
             "password_hash": password_hash,
+            "role": role,
             "created_at": time.time(),
         }
         await self._col.insert_one(doc)
@@ -39,6 +42,12 @@ class UserRepository:
 
     async def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         return await self._col.find_one({"_id": user_id})
+
+    async def list(self) -> list[dict[str, Any]]:
+        return await self._col.find().sort("created_at", 1).to_list(length=None)
+
+    async def admin_exists(self) -> bool:
+        return await self._col.find_one({"role": "admin"}) is not None
 
 
 class RoomRepository:

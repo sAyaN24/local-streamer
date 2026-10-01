@@ -18,6 +18,7 @@ __all__ = [
     "get_user_repo",
     "get_annotation_repo",
     "get_current_user",
+    "get_current_admin_user",
 ]
 
 _bearer_scheme = HTTPBearer(auto_error=True)
@@ -57,3 +58,11 @@ async def get_current_user(
     if user is None:
         raise HTTPException(401, "user not found")
     return user
+
+
+async def get_current_admin_user(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    if current_user.get("role") != "admin":
+        raise HTTPException(403, "admin access required")
+    return current_user

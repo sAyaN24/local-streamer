@@ -51,6 +51,18 @@ use this if you want to edit `infra/.env` first). See `setup.sh --help`.
 `LIVEKIT_API_SECRET` / `AUTH_JWT_SECRET` values, then
 `sudo systemctl restart streammark`.
 
+**Admin login:** the first `docker compose up` also creates an admin account
+(see `infra/scripts/seed_admin.py`) and prints its email/password once, to
+that one-shot container's own logs:
+
+```bash
+docker compose -f /opt/local-streamer/infra/docker-compose.yml logs seed-admin
+```
+
+Log in with those credentials and open `/admin` to add further users. Set
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` in `infra/.env` beforehand if you'd rather
+pick them yourself instead of getting a random generated password.
+
 ## Manage the service
 
 ```bash

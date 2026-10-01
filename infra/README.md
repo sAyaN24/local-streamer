@@ -16,7 +16,9 @@ folder just holds the pieces:
   service), and `api.Dockerfile` (the source the CI workflow builds from; not
   used by this compose file directly, which pulls the published image
   instead).
-- `scripts/` — `start_capture.sh` (the live capture-card launcher) and
+- `scripts/` — `start_capture.sh` (the live capture-card launcher),
+  `seed_admin.py` (runs as the one-shot `seed-admin` compose service; creates
+  the first admin login and prints it to that service's logs), and
   `seed_demo_room.py` (runs as the one-shot `seed` compose service).
 - `.env.example` — copy to `.env` and fill in real secrets before running
   anything here. `start_capture.sh` rewrites `LIVEKIT_URL` in `.env` and
