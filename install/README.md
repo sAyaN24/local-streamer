@@ -38,9 +38,17 @@ What it does:
 6. Sets up a native Python venv for `stream-publisher` (the capture-card
    ingest tool, which needs direct `/dev/videoN` access and so runs outside
    Docker) — skip with `--skip-publisher` if this box has no capture card.
+   Also adds the invoking user to the `video` group so it can open the
+   capture device without running as root.
 7. Installs and enables a `streammark.service` systemd unit that runs
    `docker compose up -d` on boot. Containers use `restart: unless-stopped`,
    so they also survive Docker daemon restarts on their own.
+8. Installs and enables a second `streammark-publisher.service` systemd unit
+   (skipped along with step 6 under `--skip-publisher`) that runs
+   `streammark-publish` — it auto-detects the capture card, publishes into
+   the `demo-room` room, and keeps retrying (every 10s, indefinitely) if no
+   usable card is found yet, so plugging one in later (or replugging it)
+   just gets picked up on the next retry with no manual restart needed.
 
 Useful flags: `--repo <url>`, `--branch <name>`, `--dir <path>`,
 `--skip-publisher`, `--no-start` (install everything but don't start yet —
@@ -71,6 +79,23 @@ sudo systemctl restart streammark
 sudo systemctl stop streammark
 docker compose -f /opt/local-streamer/infra/docker-compose.yml logs -f
 ```
+
+The capture-card publisher is a separate unit (it runs natively, not in
+Docker — see step 8 above):
+
+```bash
+sudo systemctl status streammark-publisher
+sudo systemctl restart streammark-publisher
+sudo systemctl stop streammark-publisher
+journalctl -u streammark-publisher -f
+```
+
+It's normal to see it repeatedly fail/restart (every 10s) whenever no
+capture card is plugged in — that's the intended way it waits for one to
+become available, not an error to chase. To publish into a room other than
+`demo-room`, edit the `--room` argument in
+`/etc/systemd/system/streammark-publisher.service`, then
+`sudo systemctl daemon-reload && sudo systemctl restart streammark-publisher`.
 
 ## Uninstall
 

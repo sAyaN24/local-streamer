@@ -1,0 +1,32 @@
+[Unit]
+Description=Local Streamer (StreamMark) - capture-card publisher
+Documentation=https://github.com/sAyaN24/local-streamer
+After=streammark.service network-online.target
+Wants=network-online.target
+# Ordering only, not a hard dependency: streammark-publish's own LiveKit
+# connect-retry loop (streammark_publisher.ingest.reconnect) already
+# tolerates the Docker stack being briefly unreachable.
+
+[Service]
+Type=simple
+User=__TARGET_USER__
+WorkingDirectory=__INSTALL_DIR__/infra
+# Edit --room here (then: systemctl daemon-reload && systemctl restart
+# streammark-publisher) if you want this to publish into a different room
+# than the one infra/scripts/seed_demo_room.py creates.
+ExecStart=__INSTALL_DIR__/stream-publisher/.venv/bin/streammark-publish --room demo-room
+# The capture card may not be plugged in (yet, or again) whenever this unit
+# starts -- streammark-publish's own preflight check (open + non-black-frame
+# test) exits non-zero in that case, see
+# stream-publisher/src/streammark_publisher/ingest/autopublish.py. Restart
+# indefinitely with no backoff ceiling so it keeps retrying until a usable
+# device shows up, however long that takes. A card dropping out *mid-stream*
+# is already handled inside the process itself (device reopen / LiveKit
+# reconnect, see ingest/publisher.py + ingest/reconnect.py) without exiting,
+# so this restart loop only needs to cover "not available at all yet".
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

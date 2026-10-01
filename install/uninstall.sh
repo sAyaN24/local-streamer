@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Reverses install/setup.sh. By default this only stops/disables the
-# systemd service (the safe, non-destructive part). Everything that
+# systemd service(s) -- streammark and, if present, streammark-publisher
+# (the safe, non-destructive part). Everything that
 # destroys data or removes system packages is opt-in via flags, because
 # this box's Docker/Python may be used by things other than this project.
 #
@@ -31,6 +32,7 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/local-streamer"
 SERVICE_NAME="streammark"
+PUBLISHER_SERVICE_NAME="streammark-publisher"
 PURGE_DATA=0
 PURGE_REPO=0
 PURGE_PACKAGES=0
@@ -56,7 +58,7 @@ die() { echo -e "\nError: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "must be run as root (try: sudo bash $0)"
 
 echo "This will:"
-echo "  - stop and disable the '$SERVICE_NAME' systemd service"
+echo "  - stop and disable the '$SERVICE_NAME' and '$PUBLISHER_SERVICE_NAME' systemd services"
 [[ "$PURGE_DATA" -eq 1 ]]     && echo "  - DELETE all Docker volumes for the stack (MongoDB data) [--purge-data]"
 [[ "$PURGE_REPO" -eq 1 ]]     && echo "  - DELETE $INSTALL_DIR (repo + infra/.env secrets) [--purge-repo]"
 [[ "$PURGE_PACKAGES" -eq 1 ]] && echo "  - apt-get purge Docker Engine and setup.sh-installed Python 3.12 [--purge-packages]"
@@ -84,7 +86,7 @@ else
   warn "compose file not found at $COMPOSE_FILE -- skipping 'docker compose down'."
 fi
 
-# ── 2. systemd service ─────────────────────────────────────────────────────
+# ── 2. systemd service(s) ───────────────────────────────────────────────────
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 if [[ -f "$UNIT_PATH" ]]; then
   log "Stopping and disabling $SERVICE_NAME..."
@@ -95,6 +97,16 @@ if [[ -f "$UNIT_PATH" ]]; then
   systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
 else
   warn "$UNIT_PATH not found -- service already removed?"
+fi
+
+PUB_UNIT_PATH="/etc/systemd/system/${PUBLISHER_SERVICE_NAME}.service"
+if [[ -f "$PUB_UNIT_PATH" ]]; then
+  log "Stopping and disabling $PUBLISHER_SERVICE_NAME..."
+  systemctl stop "$PUBLISHER_SERVICE_NAME" || true
+  systemctl disable "$PUBLISHER_SERVICE_NAME" || true
+  rm -f "$PUB_UNIT_PATH"
+  systemctl daemon-reload
+  systemctl reset-failed "$PUBLISHER_SERVICE_NAME" 2>/dev/null || true
 fi
 
 # ── 3. Built images ────────────────────────────────────────────────────────

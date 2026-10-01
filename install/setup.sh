@@ -3,7 +3,10 @@
 # installs Docker + the Python toolchain, clones/updates the repo, and
 # installs a systemd service so the Docker Compose stack (LiveKit + MongoDB +
 # API + frontend) comes up automatically on boot and stays up via Docker's
-# own `restart: unless-stopped` policy.
+# own `restart: unless-stopped` policy. Also installs a second systemd service
+# for the capture-card publisher (streammark-publish), which runs natively
+# (not in Docker -- see the step 7 comment below) and retries on its own
+# until a capture card is actually plugged in and usable.
 #
 # Usage (as root or via sudo):
 #   sudo bash install/setup.sh [options]
@@ -131,6 +134,17 @@ fi
 
 DOCKER_BIN="$(command -v docker)"
 
+# video group: lets the capture-card publisher (step 8b below) open /dev/videoN
+# without running as root. Harmless/no-op if the group doesn't exist (no V4L2
+# devices ever seen on this box) or the user is already in it.
+if [[ "$SETUP_PUBLISHER" -eq 1 ]] && [[ "$TARGET_USER" != "root" ]] \
+   && getent group video &>/dev/null && ! id -nG "$TARGET_USER" | grep -qw video; then
+  usermod -aG video "$TARGET_USER"
+  warn "added $TARGET_USER to the 'video' group -- log out/in for that to take" \
+       "effect on interactive shells (the streammark-publisher systemd service" \
+       "below runs as this user via systemd directly and is unaffected)."
+fi
+
 # ── 5. Clone or update the repo ───────────────────────────────────────────
 if [[ "$SETUP_PUBLISHER" -eq 1 ]]; then
   # Full clone: the native venv step below needs shared/ + stream-publisher/
@@ -252,9 +266,53 @@ else
       "  sudo systemctl start $SERVICE_NAME"
 fi
 
+# ── 8b. systemd service for the capture-card publisher ───────────────────
+# Separate unit (not folded into the Docker stack's service above) because
+# streammark-publish must run natively -- see the venv step's own comment.
+# Restart=on-failure (set in the template) covers a capture card that isn't
+# plugged in yet, or gets unplugged and replugged later: the process exits
+# non-zero until a usable device shows up, and systemd just keeps retrying.
+PUBLISHER_SERVICE_NAME="streammark-publisher"
+if [[ "$SETUP_PUBLISHER" -eq 1 ]]; then
+  log "Installing systemd service '$PUBLISHER_SERVICE_NAME'..."
+  PUB_UNIT_PATH="/etc/systemd/system/${PUBLISHER_SERVICE_NAME}.service"
+  PUB_TEMPLATE="$SCRIPT_DIR/streammark-publisher.service.template"
+  [[ -f "$PUB_TEMPLATE" ]] || PUB_TEMPLATE="$INSTALL_DIR/install/streammark-publisher.service.template"
+  if [[ -f "$PUB_TEMPLATE" ]]; then
+    sed \
+      -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
+      -e "s|__TARGET_USER__|$TARGET_USER|g" \
+      "$PUB_TEMPLATE" > "$PUB_UNIT_PATH"
+
+    systemctl daemon-reload
+    systemctl enable "$PUBLISHER_SERVICE_NAME"
+
+    if [[ "$START_SERVICE" -eq 1 ]]; then
+      log "Starting $PUBLISHER_SERVICE_NAME (retries automatically until a capture card is detected)..."
+      systemctl restart "$PUBLISHER_SERVICE_NAME"
+      systemctl --no-pager status "$PUBLISHER_SERVICE_NAME" || true
+    else
+      log "Skipped starting $PUBLISHER_SERVICE_NAME (--no-start). Start it with:" \
+          "  sudo systemctl start $PUBLISHER_SERVICE_NAME"
+    fi
+  else
+    warn "can't find streammark-publisher.service.template -- skipping the" \
+         "capture-card publisher service (run streammark-publish by hand instead)."
+    PUBLISHER_SERVICE_NAME=""
+  fi
+else
+  log "Skipping publisher systemd service (--skip-publisher or Python 3.12 unavailable)."
+  PUBLISHER_SERVICE_NAME=""
+fi
+
 log "Done."
 echo "  Install dir:  $INSTALL_DIR"
 echo "  Env file:     $ENV_FILE"
 echo "  Service:      systemctl {status|start|stop|restart} $SERVICE_NAME"
 echo "  Logs:         docker compose -f $INSTALL_DIR/infra/docker-compose.yml logs -f"
 echo "  Auto-restart: enabled (systemd starts it on boot; containers use restart: unless-stopped)"
+if [[ -n "$PUBLISHER_SERVICE_NAME" ]]; then
+  echo "  Publisher:    systemctl {status|start|stop|restart} $PUBLISHER_SERVICE_NAME"
+  echo "  Pub. logs:    journalctl -u $PUBLISHER_SERVICE_NAME -f"
+  echo "  Pub. restart: automatic -- retries every 10s until a capture card is detected"
+fi
