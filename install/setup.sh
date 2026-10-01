@@ -137,6 +137,12 @@ if [[ "$SETUP_PUBLISHER" -eq 1 ]]; then
   # source on disk.
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     log "Repo already present at $INSTALL_DIR -- pulling latest $BRANCH..."
+    # A previous --skip-publisher run on this box may have left the checkout
+    # sparse (just infra/+install/). Disable that first so shared/+stream-
+    # publisher/ (needed for the venv step below) actually land on disk --
+    # otherwise `checkout`/`pull` below would silently keep them hidden even
+    # though this run wants the full tree. Harmless no-op if not sparse.
+    git -C "$INSTALL_DIR" sparse-checkout disable 2>/dev/null || true
     git -C "$INSTALL_DIR" fetch origin "$BRANCH"
     git -C "$INSTALL_DIR" checkout "$BRANCH"
     git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH"
