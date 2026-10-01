@@ -83,9 +83,11 @@ def _resolve_device(args: argparse.Namespace) -> str:
     return str(device)
 
 
-def _run_preflight(device: str, width: int, height: int, fps: int, force: bool) -> None:
+def _run_preflight(
+    device: str, width: int, height: int, fps: int, fourcc: str, force: bool
+) -> None:
     print("\nChecking capture device (open + non-black frame check)...")
-    result = check_device(device, width, height, fps)
+    result = check_device(device, width, height, fps, fourcc)
     print(
         f"  device={device} negotiated={result.width}x{result.height} @ {result.fps:.0f}fps "
         f"(requested {width}x{height} @ {fps})"
@@ -126,7 +128,14 @@ async def run_publish(argv: list[str] | None = None) -> None:
     settings.capture_device = device
 
     if not args.skip_preflight:
-        _run_preflight(device, settings.video_width, settings.video_height, settings.video_fps, args.force)
+        _run_preflight(
+            device,
+            settings.video_width,
+            settings.video_height,
+            settings.video_fps,
+            settings.capture_fourcc,
+            args.force,
+        )
 
     session = PublisherSession(settings, room_name, identity=args.identity)
 

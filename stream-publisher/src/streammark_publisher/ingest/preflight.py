@@ -37,7 +37,12 @@ def _platform_backend() -> int:
 
 
 def check_device(
-    device: str | int, width: int, height: int, fps: int, sample_frames: int = 15
+    device: str | int,
+    width: int,
+    height: int,
+    fps: int,
+    fourcc: str = "MJPG",
+    sample_frames: int = 15,
 ) -> PreflightResult:
     cap = cv2.VideoCapture(device, _platform_backend())
     if not cap.isOpened():
@@ -52,6 +57,15 @@ def check_device(
             message=f"could not open capture device {device!r}",
         )
 
+    # Mirrors CaptureDevice.open() in capture.py -- same set order (fourcc, then
+    # resolution, then fps), because some V4L2 drivers reset other settings on a
+    # format change. Without forcing fourcc, OpenCV/V4L2 falls back to a default
+    # pixel format (often raw YUYV) that many USB capture cards can't actually
+    # deliver at 1080p -- producing a bandwidth-starved low fps and/or all-zero
+    # frames even though the real publish path (which does set fourcc) works
+    # fine. Checking a different negotiation than what's actually published
+    # makes this preflight worse than useless, so it must match.
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc.upper()))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     cap.set(cv2.CAP_PROP_FPS, fps)

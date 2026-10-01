@@ -29,6 +29,13 @@ ROOM="${ROOM:-demo-room}"
 CAP_WIDTH="${CAP_WIDTH:-1920}"
 CAP_HEIGHT="${CAP_HEIGHT:-1080}"
 CAP_FPS="${CAP_FPS:-30}"
+# Matches streammark_shared.config.Settings.capture_fourcc's default -- must be
+# set on the capture device (see the preflight step below) for the same reason
+# capture.py sets it on the real publish path: without it, OpenCV/V4L2 falls
+# back to a default pixel format (often raw YUYV) that many USB capture cards
+# can't actually deliver at 1080p, so the preflight would be testing a
+# different, worse negotiation than what streammark-ingest actually publishes.
+CAP_FOURCC="${CAP_FOURCC:-MJPG}"
 
 # ── 0. Resolve docker compose ─────────────────────────────────────────────────
 # Docker Desktop ships compose as a CLI plugin, but a Homebrew-installed docker
@@ -306,11 +313,13 @@ fi
 echo ""
 echo "==> Pre-flighting capture device (open + non-black frame check)..."
 set +e
-"$VPY" - "$DEVICE" "$CAP_WIDTH" "$CAP_HEIGHT" "$CAP_FPS" <<'PY'
+"$VPY" - "$DEVICE" "$CAP_WIDTH" "$CAP_HEIGHT" "$CAP_FPS" "$CAP_FOURCC" <<'PY'
 import sys
 import cv2
 
-raw, want_w, want_h, want_fps = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+raw, want_w, want_h, want_fps, want_fourcc = (
+    sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5],
+)
 dev = int(raw) if raw.isdigit() else raw
 
 if sys.platform == "darwin":
@@ -325,6 +334,10 @@ if not cap.isOpened():
     print(f"    FAIL: could not open {raw!r}")
     sys.exit(1)
 
+# Order matters on many V4L2 drivers: fourcc, then resolution, then fps (mirrors
+# CaptureDevice.open() in stream-publisher's capture.py -- see CAP_FOURCC comment
+# above for why this must match the real publish path's negotiation).
+cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*want_fourcc.upper()))
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, want_w)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, want_h)
 cap.set(cv2.CAP_PROP_FPS, want_fps)

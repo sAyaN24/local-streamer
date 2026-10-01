@@ -93,7 +93,9 @@ journalctl -u streammark-publisher -f
 It's normal to see it repeatedly fail/restart (every 10s) whenever no
 capture card is plugged in — that's the intended way it waits for one to
 become available, not an error to chase. To publish into a room other than
-`demo-room`, edit the `--room` argument in
+`demo-room`, or pin a specific device instead of relying on auto-detect
+(e.g. `--device /dev/video2`, if a card exposes multiple `/dev/videoN` nodes
+and auto-detect picks the wrong one), edit the `ExecStart` line in
 `/etc/systemd/system/streammark-publisher.service`, then
 `sudo systemctl daemon-reload && sudo systemctl restart streammark-publisher`.
 
